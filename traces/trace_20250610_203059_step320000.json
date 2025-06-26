@@ -1,0 +1,46 @@
+{
+    "timestamp": "20250610_203059",
+    "step": 320000,
+    "final_gadget": "Gadget Combined(AP2T+AP2T):",
+    "target_gadget": "Gadget C2T:",
+    "success_rate": 1.0,
+    "average_reward": 212.3,
+    "trajectory": [
+        {
+            "op": "COMBINE",
+            "args": [
+                "g1",
+                "g0"
+            ],
+            "reward": 5.3,
+            "rot": 1,
+            "splice": 3
+        },
+        {
+            "op": "CONNECT",
+            "args": [
+                "g0",
+                "4",
+                "2"
+            ],
+            "reward": 4.0
+        },
+        {
+            "op": "CONNECT",
+            "args": [
+                "g0",
+                "0",
+                "6"
+            ],
+            "reward": 3.0
+        },
+        {
+            "op": "STOP",
+            "reward": 200.0
+        }
+    ],
+    "initial_gadgets": [
+        "AP2T",
+        "AP2T"
+    ]
+}
