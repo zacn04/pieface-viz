@@ -438,6 +438,13 @@ document.addEventListener('DOMContentLoaded', () => {
   setButtonsEnabled(false);
   const sel = document.getElementById('traceSelect');
   const loadBtn = document.getElementById('loadBtn');
+  const nextBtn  = document.getElementById('nextStepBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  
+  nextBtn.addEventListener('click', nextStep);
+  resetBtn.addEventListener('click', reset);
+
+  
 
 
   async function populateTraceDropdown() {
