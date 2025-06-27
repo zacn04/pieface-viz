@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>About PIEFACE</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <style>
+    body {
+      font-family: sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 2rem auto;
+      padding: 1rem;
+    }
+    h1, h2 {
+        color: #222;
+        font-weight: bold; /* ensures headers are bold */
+        margin-top: 2.5rem; /* adds extra vertical space before */
+        margin-bottom: 1rem; /* adds space after */
+    }
+
+    code {
+      background-color: #f2f2f2;
+      padding: 0.2em 0.4em;
+      border-radius: 4px;
+    }
+    a {
+      color: #1a73e8;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <h1>About PIEFACE</h1>
+
+  <p><strong>PIEFACE</strong> (Personalized Interactive Environment For Automata Combination Exploration) is a tool for visualizing and debugging <em>gadget-based reductions</em> in theoretical computer science. It was built to help understand reinforcement learning (RL) agents trained to synthesize motion-planning gadget constructions.</p>
+
+  <h2>What Are Gadget Reductions?</h2>
+  <p>In complexity theory, <strong>gadgets</strong> are modular components used in reductions—like logic gates for computational hardness proofs. These gadgets help encode constraints in problems like <em>Sokoban</em>, <em>PushPush</em>, or block-sliding puzzles.</p>
+
+  <p>Common gadgets include:</p>
+  <ul>
+    <li><strong>AP2T</strong>: Anti-Parallel 2-Toggle</li>
+    <li><strong>C2T</strong>: Crossing 2-Toggle</li>
+    <li><strong>L2T</strong>: Locking 2-Toggle</li>
+    <li><strong>NWT</strong>: Noncrossing-Wire Toggle,</li>
+    <li>And others used in PSPACE-hardness proofs</li>
+  </ul>
+
+  <h2>Purpose of PIEFACE</h2>
+  <p>Originally developed to help debug RL-discovered gadget simulations, PIEFACE lets users step through traces, view gadget states, and interact with known constructions.</p>
+
+  <h2>Current Features</h2>
+  <ul>
+    <li>Step-by-step visualization of agent-discovered traces</li>
+    <li>Preloaded examples (e.g. AP2T to C2T)</li>
+    <li>Support for all 4-location gadget types</li>
+  </ul>
+
+  <h2>Coming Soon (v0.2)</h2>
+  <ul>
+    <li>Interactive user-editable gadgets</li>
+    <li>Live RL inference in-browser !!!</li>
+    <li>Expanded gadget support</li>
+  </ul>
+
+  <h2>Background Reading</h2>
+  <ul>
+    <li><a href="https://arxiv.org/abs/1812.03592" target="_blank">Demaine, Hendrickson, Lynch (2020): Toward a General Complexity Theory of Motion
+Planning: Characterizing Which Gadgets Make
+Games Hard</a></li>
+    <li><a href="https://perso.limos.fr/~palafour/PAPERS/PDF/Garey-Johnson79.pdf" target="_blank">Garey & Johnson (1979): Computers and Intractability</a></li>
+    <li><a href="https://arxiv.org/abs/cs/0205005" target="_blank">Sokoban PSPACE-completeness proof</a></li>
+    <li>Research project paper: under double-blind review</li>
+  </ul>
+
+
+  <h2>Contact</h2>
+  <p>Interested in collaborating or chatting about PIEFACE? Reach out via <a href="https://www.linkedin.com/in/zacburton" target="_blank">LinkedIn</a> or email me at zacnwo [at] mit [dot] edu.</p>
+<p><a href="index.html">&larr; Back to PIEFACE</a></p>
+</body>
+</html>

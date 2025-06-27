@@ -328,6 +328,7 @@ async function initFromBackend() {
 }
 
 async function nextStep() {
+
   if (!traceLoaded) return;
   setLoading(true, 'Stepping...');
   const res = await fetch(`${API_BASE}/step`, { method: 'POST' });

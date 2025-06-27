@@ -9,7 +9,11 @@
 <body>
   <section class="section">
     <div class="container">
-      <h1 class="title">PIEFACE v0.1</h1>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+      <h1 class="title" style="margin-bottom: 0;">PIEFACE v0.1</h1>
+      <a href="info.html" class="button is-small is-light">About</a>
+      </div>
+
       <div class="columns">
         <div class="column is-three-quarters">
           <div class="buttons">
@@ -22,6 +26,7 @@
             <button class="button is-link" id="loadBtn" disabled>Load Trace</button>
             <button class="button is-info" id="nextStepBtn" disabled>Next Step</button>
             <button class="button is-warning" id="resetBtn" disabled>Reset</button>
+            
           </div>
           <div id="cy" style="width:100%; height:600px; border:1px solid #ccc; margin-bottom:1em;"></div>
           <pre id="output"></pre>
