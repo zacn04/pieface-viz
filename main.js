@@ -298,7 +298,7 @@ function updateGadgetInfo(meta) {
 // In your initFromBackend(), after fetching meta:
 async function initFromBackend() {
   setLoading(true, 'Initializing from backend...');
-  const res = await fetch('${API_BASE}/trace_meta');
+  const res = await fetch(`${API_BASE}/trace_meta`);
   const meta = await res.json();
   updateGadgetInfo(meta); // <-- Add this line
   const initials = meta.initial_gadgets || [];
