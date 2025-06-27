@@ -295,12 +295,11 @@ function updateGadgetInfo(meta) {
   document.getElementById('target-gadget').textContent = meta.target || 'Unknown';
 }
 
-// In your initFromBackend(), after fetching meta:
 async function initFromBackend() {
   setLoading(true, 'Initializing from backend...');
   const res = await fetch(`${API_BASE}/trace_meta`);
   const meta = await res.json();
-  updateGadgetInfo(meta); // <-- Add this line
+  updateGadgetInfo(meta); 
   const initials = meta.initial_gadgets || [];
   const w = cy.width(), h = cy.height();
   const spacing = 150;
