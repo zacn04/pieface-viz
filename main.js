@@ -249,9 +249,10 @@ function setLoading(isLoading, message = '') {
 }
 
 function setButtonsEnabled(enabled) {
-  document.querySelector('button[onclick="nextStep()"], button[onclick="window.nextStep()"], button#nextStepBtn')?.toggleAttribute('disabled', !enabled);
-  document.querySelector('button[onclick="reset()"], button[onclick="window.reset()"], button#resetBtn')?.toggleAttribute('disabled', !enabled);
+  document.getElementById('nextStepBtn').disabled = !enabled;
+  document.getElementById('resetBtn').disabled     = !enabled;
 }
+
 
 async function handleLoadTrace() {
   setLoading(true, 'Loading trace file...');
