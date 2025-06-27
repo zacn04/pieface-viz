@@ -264,7 +264,7 @@ async function handleLoadTrace() {
       setLoading(true, 'Uploading txt trace to backend...');
       const formData = new FormData();
       formData.append('file', result.file);
-      const res = await fetch('${API_BASE}/upload_txt_trace', {
+      const res = await fetch(`${API_BASE}/upload_txt_trace`, {
         method: 'POST',
         body: formData
       });
