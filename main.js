@@ -1,4 +1,7 @@
-// main.js - modularized frontend logic with port-based visualization
+// main.js 
+
+const API_BASE = "https://api.pieface.ai";
+
 
 // Helper: position ports in a circle around the gadget
 function getPortPosition(gadgetPos, idx) {
@@ -223,7 +226,7 @@ function relabelGadgetPorts(gadgetId, newPorts, newOrigins) {
 
 // Helper to send a loaded trace to the backend
 async function sendTraceToBackend(trace) {
-  const res = await fetch('http://127.0.0.1:5000/upload_trace', {
+  const res = await fetch(`${API_BASE}/upload_trace`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(trace)
@@ -261,7 +264,7 @@ async function handleLoadTrace() {
       setLoading(true, 'Uploading txt trace to backend...');
       const formData = new FormData();
       formData.append('file', result.file);
-      const res = await fetch('http://127.0.0.1:5000/upload_txt_trace', {
+      const res = await fetch('${API_BASE}/upload_txt_trace', {
         method: 'POST',
         body: formData
       });
@@ -295,7 +298,7 @@ function updateGadgetInfo(meta) {
 // In your initFromBackend(), after fetching meta:
 async function initFromBackend() {
   setLoading(true, 'Initializing from backend...');
-  const res = await fetch('http://127.0.0.1:5000/trace_meta');
+  const res = await fetch('${API_BASE}/trace_meta');
   const meta = await res.json();
   updateGadgetInfo(meta); // <-- Add this line
   const initials = meta.initial_gadgets || [];
@@ -326,7 +329,7 @@ async function initFromBackend() {
 async function nextStep() {
   if (!traceLoaded) return;
   setLoading(true, 'Stepping...');
-  const res = await fetch('http://127.0.0.1:5000/step', { method: 'POST' });
+  const res = await fetch(`${API_BASE}/step`, { method: 'POST' });
   const { op, done } = await res.json();
   document.getElementById('output').textContent += JSON.stringify(op) + '\n';
   setLoading(false);
@@ -421,7 +424,7 @@ async function nextStep() {
 async function reset() {
   if (!traceLoaded) return;
   setLoading(true, 'Resetting...');
-  await fetch('http://127.0.0.1:5000/reset', { method: 'POST' });
+  await fetch(`${API_BASE}/reset`, { method: 'POST' });
   cy.elements().remove();
   document.getElementById('output').textContent = '';
   cy.layout({ name: 'preset' }).run();
@@ -432,6 +435,41 @@ async function reset() {
 
 document.addEventListener('DOMContentLoaded', () => {
   setButtonsEnabled(false);
+  const sel = document.getElementById('traceSelect');
+  const loadBtn = document.getElementById('loadBtn');
+
+
+  async function populateTraceDropdown() {
+    const res = await fetch(`${API_BASE}/list_traces`);
+    const traces = await res.json();
+    traces.forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    });
+  }
+
+  sel.addEventListener('change', () => {
+    loadBtn.disabled = sel.value === '';
+  });
+
+
+  loadBtn.addEventListener('click', async () => {
+    setLoading(true, `Loading ${sel.value}…`);
+    await fetch(`${API_BASE}/select_trace`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ filename: sel.value })
+    });
+    await fetch(`${API_BASE}/reset`, { method: 'POST' });
+    traceLoaded = true;
+    setButtonsEnabled(true);
+    await initFromBackend();
+    setLoading(false);
+  });
+
+  populateTraceDropdown();
 });
 
 window.nextStep = nextStep;

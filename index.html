@@ -9,13 +9,19 @@
 <body>
   <section class="section">
     <div class="container">
-      <h1 class="title">PIEFACE Trace Viewer</h1>
+      <h1 class="title">PIEFACE</h1>
       <div class="columns">
         <div class="column is-three-quarters">
           <div class="buttons">
-            <button class="button is-link" onclick="handleLoadTrace()">Load Trace</button>
-            <button class="button is-info" onclick="nextStep()">Next Step</button>
-            <button class="button is-warning" onclick="reset()">Reset</button>
+            <!-- Dropdown for preloaded traces -->
+            <div class="select">
+              <select id="traceSelect">
+                <option value="" disabled selected>Select a trace…</option>
+              </select>
+            </div>
+            <button class="button is-link" id="loadBtn" disabled>Load Trace</button>
+            <button class="button is-info" id="nextStepBtn" disabled>Next Step</button>
+            <button class="button is-warning" id="resetBtn" disabled>Reset</button>
           </div>
           <div id="cy" style="width:100%; height:600px; border:1px solid #ccc; margin-bottom:1em;"></div>
           <pre id="output"></pre>
