@@ -300,6 +300,7 @@ async function initFromBackend() {
   const res = await fetch(`${API_BASE}/trace_meta`);
   const meta = await res.json();
   updateGadgetInfo(meta); 
+  traceLoaded = true;
   const initials = meta.initial_gadgets || [];
   const w = cy.width(), h = cy.height();
   const spacing = 150;
