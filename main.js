@@ -1,6 +1,6 @@
 // main.js 
 
-const API_BASE = "http://127.0.0.1:5001"; 
+const API_BASE = "http://api.pieface.ai"; 
 
 
 // Helper: position ports in a circle around the gadget
