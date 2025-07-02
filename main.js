@@ -1,6 +1,6 @@
 // main.js 
 
-const API_BASE = "127.0.0.1:5000"; 
+const API_BASE = "http://127.0.0.1:5001"; 
 
 
 // Helper: position ports in a circle around the gadget
@@ -251,7 +251,7 @@ function setLoading(isLoading, message = '') {
 function setButtonsEnabled(enabled) {
   document.getElementById('nextStepBtn').disabled = !enabled;
   document.getElementById('resetBtn').disabled     = !enabled;
-  document.getElementById("syncStateBtn").disabled = !enabled;
+  document.getElementById("inferenceBtn").disabled = !enabled;
 
 }
 
@@ -449,17 +449,56 @@ async function fetchEnvState() {
   }
 }
 
+async function inferModelStep() {
+  try {
+    const response = await fetch(`${API_BASE}/infer_next_step`, { method: 'POST' });
+    const data = await response.json();
+
+    const suggestionDiv = document.getElementById("model-suggestion");
+    const topActionsList = document.getElementById("top-actions");
+
+    // Clear previous
+    suggestionDiv.textContent = "";
+    topActionsList.innerHTML = "";
+
+    if (data.description) {
+      suggestionDiv.innerHTML = `
+    Model suggests: ${data.description}
+    <span title="${data.tooltip || ''}" style="cursor: help;">- confused?</span>
+  `;
+    }
+
+    if (data.top_actions) {
+      data.top_actions.forEach(({ action_desc, confidence }) => {
+        const li = document.createElement("li");
+        li.textContent = `${action_desc} (${(confidence * 100).toFixed(1)}%)`;
+        topActionsList.appendChild(li);
+      });
+    }
+  } catch (err) {
+    console.error("Error fetching model suggestion:", err);
+  }
+}
+
+
+
+
+
 document.addEventListener('DOMContentLoaded', () => {
   setButtonsEnabled(false);
   const sel = document.getElementById('traceSelect');
   const loadBtn = document.getElementById('loadBtn');
   const nextBtn  = document.getElementById('nextStepBtn');
   const resetBtn = document.getElementById('resetBtn');
-  const syncStateBtn = document.getElementById('syncStateBtn');
+  const inferenceBtn = document.getElementById('inferenceBtn');
+  document.getElementById("model-suggestion").textContent = "";
+  document.getElementById("top-actions").innerHTML = "";
+
 
 
   nextBtn.addEventListener('click', nextStep);
   resetBtn.addEventListener('click', reset);
+  inferenceBtn.addEventListener('click', inferModelStep);
 
   
 
@@ -481,7 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   loadBtn.addEventListener('click', async () => {
-    setLoading(true, `Loading ${sel.value}…`);
+    setLoading(true, `Loading ${sel.value}...`);
     await fetch(`${API_BASE}/select_trace`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
