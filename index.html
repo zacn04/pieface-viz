@@ -10,7 +10,7 @@
   <section class="section">
     <div class="container">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-      <h1 class="title" style="margin-bottom: 0;">PIEFACE v0.1</h1>
+      <h1 class="title" style="margin-bottom: 0;">PIEFACE v0.2</h1>
       <a href="info.html" class="button is-small is-light">About</a>
       </div>
 
@@ -20,13 +20,13 @@
             <!-- Dropdown for preloaded traces -->
             <div class="select">
               <select id="traceSelect">
-                <option value="" disabled selected>Select a trace…</option>
+                <option value="" disabled selected>Select a trace...</option>
               </select>
             </div>
             <button class="button is-link" id="loadBtn" disabled>Load Trace</button>
             <button class="button is-info" id="nextStepBtn" disabled>Next Step</button>
             <button class="button is-warning" id="resetBtn" disabled>Reset</button>
-            
+            <button class="button is-success" id="syncStateBtn" disabled>Sync State</button>
           </div>
           <div id="cy" style="width:100%; height:600px; border:1px solid #ccc; margin-bottom:1em;"></div>
           <pre id="output"></pre>

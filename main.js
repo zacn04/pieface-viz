@@ -1,6 +1,6 @@
 // main.js 
 
-const API_BASE = "https://api.pieface.ai";
+const API_BASE = "127.0.0.1:5000"; 
 
 
 // Helper: position ports in a circle around the gadget
@@ -251,6 +251,8 @@ function setLoading(isLoading, message = '') {
 function setButtonsEnabled(enabled) {
   document.getElementById('nextStepBtn').disabled = !enabled;
   document.getElementById('resetBtn').disabled     = !enabled;
+  document.getElementById("syncStateBtn").disabled = !enabled;
+
 }
 
 
@@ -435,13 +437,27 @@ async function reset() {
   setLoading(false);
 }
 
+async function fetchEnvState() {
+  try {
+    const res = await fetch(`${API_BASE}/env_state`);
+    const state = await res.json();
+    console.log("Env State:", state);
+    document.getElementById('output').textContent = JSON.stringify(state, null, 2);
+  } catch (err) {
+    console.error("Failed to fetch env state:", err);
+    document.getElementById('output').textContent = 'Failed to fetch env state.';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   setButtonsEnabled(false);
   const sel = document.getElementById('traceSelect');
   const loadBtn = document.getElementById('loadBtn');
   const nextBtn  = document.getElementById('nextStepBtn');
   const resetBtn = document.getElementById('resetBtn');
-  
+  const syncStateBtn = document.getElementById('syncStateBtn');
+
+
   nextBtn.addEventListener('click', nextStep);
   resetBtn.addEventListener('click', reset);
 
