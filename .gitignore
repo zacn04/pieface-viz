@@ -1,0 +1,6 @@
+# Ignore OS and dependency directories
+.DS_Store
+node_modules/
+
+# Ignore generated traces
+traces/
