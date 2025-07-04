@@ -1,6 +1,7 @@
 // main.js 
 
-const API_BASE = "https://api.pieface.ai"; 
+// const API_BASE = "https://api.pieface.ai"; 
+const API_BASE = "http://127.0.0.1:5000"; // Change to your backend URL
 
 
 // Helper: position ports in a circle around the gadget
@@ -173,8 +174,6 @@ function addPortEdge(srcGadget, srcPort, dstGadget, dstPort) {
   const edgeId = `${srcPortNode}_to_${dstPortNode}`;
   // Print all current port nodes and their IDs
   const portNodes = cy.nodes().filter(n => n.data('port'));
-  console.log('Current port nodes:', portNodes.map(n => n.id()));
-  console.log('Adding edge:', edgeId, 'Source exists:', cy.$(`#${srcPortNode}`).length, 'Target exists:', cy.$(`#${dstPortNode}`).length);
   if (!cy.$(`#${srcPortNode}`).length || !cy.$(`#${dstPortNode}`).length) {
     console.warn(`Cannot create edge ${edgeId}: missing source or target node`);
     return;
@@ -329,80 +328,57 @@ async function initFromBackend() {
   setLoading(false);
 }
 
-async function nextStep() {
+function renderOp(op) {
+  // 1a) print to the console area
+  document.getElementById("output").textContent = JSON.stringify(op) + "\n";
 
-  if (!traceLoaded) return;
-  setLoading(true, 'Stepping...');
-  const res = await fetch(`${API_BASE}/step`, { method: 'POST' });
-  const { op, done } = await res.json();
-  document.getElementById('output').textContent += JSON.stringify(op) + '\n';
-  setLoading(false);
-  if (done) {
-    setButtonsEnabled(false);
-    // Only disable nextStep, keep reset enabled
-    document.querySelector('button[onclick="nextStep()"], button[onclick="window.nextStep()"], button#nextStepBtn')?.setAttribute('disabled', 'true');
-    document.querySelector('button[onclick="reset()"], button[onclick="window.reset()"], button#resetBtn')?.removeAttribute('disabled');
-    return;
-  }
 
+  // 1b) mutate the cytoscape graph
   if (op.op === 'CONNECT') {
-    // args: [gadgetId, srcIdx, dstIdx] where indices refer to the combined port list of the group
     const [, srcIdx, dstIdx] = op.args;
-
-
-
     const allPorts = Object.values(groupPortMaps).flat();
-    const src = allPorts.find(port => port.port === parseInt(srcIdx));
-    const dst = allPorts.find(port => port.port === parseInt(dstIdx));
-
+    const src = allPorts.find(port => port.port === +srcIdx);
+    const dst = allPorts.find(port => port.port === +dstIdx);
     if (src && dst) {
       addPortEdge(src.gadget, src.port, dst.gadget, dst.port);
-      // Optionally, visually indicate connected ports (e.g., add a class)
       cy.$(`#${src.gadget}_port_${src.port}`).addClass('connected');
       cy.$(`#${dst.gadget}_port_${dst.port}`).addClass('connected');
     } else {
-      console.warn('Could not find source or destination port for connection:', srcIdx, dstIdx);
+      console.warn('CONNECT failed to find ports', srcIdx, dstIdx);
     }
   }
   else if (op.op === 'COMBINE') {
-    // args: [g1_id, g2_id], plus rot, splice
     const [g1_id, g2_id] = op.args;
-    const rot = op.rot || 0;
+    const rot    = op.rot    || 0;
     const splice = op.splice || 0;
-    if (!gadgets[g1_id] || !gadgets[g2_id]) {
-      console.warn('Gadget ids not found for combine:', g1_id, g2_id);
-      return;
-    }
-    const g1 = gadgets[g1_id];
-    const g2 = gadgets[g2_id];
+    const g1 = gadgets[g1_id], g2 = gadgets[g2_id];
+    if (!g1 || !g2) return console.warn('COMBINE missing gadget', g1_id, g2_id);
+
+    // Compute new port lists
     const mod = g2.ports.length;
-    // g1: ports up to splice, then g1 ports after splice (shifted by g2_ports.length)
     const g1_new = [
-      ...g1.ports.slice(0, splice + 1),
-      ...g1.ports.slice(splice + 1).map(l => l + mod)
+      ...g1.ports.slice(0, splice+1),
+      ...g1.ports.slice(splice+1).map(l => l + mod),
     ];
-    // g1 provenance: up to splice, then after splice (origins stay the same)
-    const g1_newOrigins = [
-      ...g1.portOrigins.slice(0, splice + 1),
-      ...g1.portOrigins.slice(splice + 1)
+    const g1_orig = [
+      ...g1.portOrigins.slice(0, splice+1),
+      ...g1.portOrigins.slice(splice+1),
     ];
-    // g2: rotated and shifted ports
-    const g2_new = g2.ports.map((l) => ((l + rot) % mod) + splice + 1);
-    // g2 provenance: rotate portOrigins by rot
-    const g2_origins_rot = g2.portOrigins.map((_, i, arr) => arr[(i + rot) % mod]);
-    const g2_newOrigins = g2_origins_rot;
-    relabelGadgetPorts(g1_id, g1_new, g1_newOrigins);
-    relabelGadgetPorts(g2_id, g2_new, g2_newOrigins);
-    // Add to combinedGroups and draw compound node
+    const g2_new = g2.ports.map(l => ((l + rot) % mod) + splice + 1);
+    const g2_orig = g2.portOrigins.map((_,i,arr) => arr[(i+rot)%mod]);
+
+    // Re-label ports
+    relabelGadgetPorts(g1_id, g1_new, g1_orig);
+    relabelGadgetPorts(g2_id, g2_new, g2_orig);
+
+    // Make the compound node
     const groupId = `group_${g1_id}_${g2_id}`;
-    combinedGroups.push([g1_id, g2_id]);
+    combinedGroups.push([g1_id,g2_id]);
     addCompoundNode(groupId, [g1_id, g2_id]);
-    // Store the fixed combined port mapping for this group
     groupPortMaps[groupId] = [
-      ...g1_new.map(p => ({gadget: g1_id, port: p})),
-      ...g2_new.map(p => ({gadget: g2_id, port: p}))
+      ...g1_new.map(p => ({gadget:g1_id,port:p})),
+      ...g2_new.map(p => ({gadget:g2_id,port:p}))
     ];
-    // Style the compound node
     cy.$(`#${groupId}`).style({
       'background-opacity': 0,
       'border-width': 3,
@@ -411,18 +387,33 @@ async function nextStep() {
       'label': '',
       'z-index': 1
     });
-    console.log(`${g1_id} portMap after combine:`, gadgets[g1_id].portMap);
-    console.log(`${g2_id} portMap after combine:`, gadgets[g2_id].portMap);
-    console.log('Combined port map:', groupPortMaps[groupId]);
+
   }
   else if (op.op === 'STOP') {
-    // No action
+    // nothing to do
   }
   else {
-    console.warn('Unknown operation:', op);
+    console.warn('Unknown op:', op);
   }
+
+  // 1c) re-layout
   cy.layout({ name: 'preset' }).run();
   cy.fit(cy.elements(), 50);
+}
+
+async function nextStep() {
+  if (!traceLoaded) return;
+  setLoading(true, 'Stepping...');
+  const res = await fetch(`${API_BASE}/step`, { method: 'POST' });
+  const { op, done } = await res.json();
+  setLoading(false);
+
+  if (done) {
+    setButtonsEnabled(false);
+    document.getElementById("resetBtn").disabled = false;
+    return;
+  }
+  renderOp(op);
 }
 
 async function reset() {
@@ -441,7 +432,6 @@ async function fetchEnvState() {
   try {
     const res = await fetch(`${API_BASE}/env_state`);
     const state = await res.json();
-    console.log("Env State:", state);
     document.getElementById('output').textContent = JSON.stringify(state, null, 2);
   } catch (err) {
     console.error("Failed to fetch env state:", err);
@@ -475,6 +465,33 @@ async function inferModelStep() {
         topActionsList.appendChild(li);
       });
     }
+    const suggestion = data.description;
+    document.getElementById("model-suggestion").textContent = suggestion;
+
+    const acceptBtn = document.createElement("button");
+    acceptBtn.textContent = "Accept agent action";
+    acceptBtn.classList.add("button", "is-small", "is-success");
+
+    
+    acceptBtn.onclick = async () => {
+    const res = await fetch(`${API_BASE}/apply_action`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ action: suggestion, actor: "agent" }),
+    });
+
+    const result = await res.json();
+    if (!result.success) {
+      alert("Failed: " + result.error);
+    } else {
+      renderOp(result.op);
+      suggestionDiv.textContent = "";
+      acceptBtn.remove();
+      document.getElementById("nextStepBtn").disabled = true;
+      document.getElementById("resetBtn").disabled = false;
+    }
+  };
+  document.getElementById("model-suggestion-box").appendChild(acceptBtn);
   } catch (err) {
     console.error("Error fetching model suggestion:", err);
   }
