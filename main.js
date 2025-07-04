@@ -1,7 +1,6 @@
 // main.js 
 
-// const API_BASE = "https://api.pieface.ai"; 
-const API_BASE = "http://127.0.0.1:5000"; // Change to your backend URL
+const API_BASE = "https://api.pieface.ai"; 
 
 
 // Helper: position ports in a circle around the gadget
