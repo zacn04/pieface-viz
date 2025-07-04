@@ -1,41 +1,105 @@
-<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <title>PIEFACE v0.4</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
   <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
   <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
   <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
   <script src="main.js?v0.2" defer></script>
+
   <meta property="og:title" content="PIEFACE: RL Trace Visualizer">
   <meta property="og:description" content="Built at MIT CSAIL, PIEFACE helps debug RL agents trained for symbolic reasoning tasks.">
   <meta property="og:url" content="https://pieface.ai">
   <meta property="og:type" content="website">
 
+  <style>
+    /* group & space out controls */
+    .controls-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* make sure preformatted output scrolls instead of overflowing */
+    #output {
+      white-space: pre-wrap;
+      overflow-x: auto;
+      max-height: 300px;
+      padding: 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #fafafa;
+    }
+
+    /* just tighter borders on the graph area */
+    #cy {
+      width: 100%;
+      height: 600px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+    }
+  </style>
 </head>
+
 <body>
   <section class="section">
     <div class="container">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-      <h1 class="title" style="margin-bottom: 0;">PIEFACE v0.3</h1>
-      <a href="info.html" class="button is-small is-light">About</a>
+      <div class="level mb-4">
+        <h1 class="title level-left mb-0">PIEFACE v0.4</h1>
+        <div class="level-right">
+          <a href="info.html" class="button is-small is-light">About</a>
+        </div>
       </div>
 
-      <div class="columns">
+      <div class="columns is-variable is-6">
         <div class="column is-three-quarters">
-          <div class="buttons">
-            <!-- Dropdown for preloaded traces -->
-            <div class="select">
-              <select id="traceSelect">
-                <option value="" disabled selected>Select a trace...</option>
-              </select>
+          <div class="controls-group">
+            <!-- Trace selector + load -->
+            <div class="control">
+              <span class="select is-medium">
+                <select id="traceSelect">
+                  <option value="" disabled selected>Select a trace</option>
+                  <!-- … -->
+                </select>
+              </span>
             </div>
-            <button class="button is-link" id="loadBtn" disabled>Load Trace</button>
-            <button class="button is-info" id="nextStepBtn" disabled>Trace Next Step</button>
-            <button class="button is-success" id="inferenceBtn" disabled>Agent Next Step</button>
-            <button class="button is-warning" id="resetBtn" disabled>Reset</button>
+            <div class="control">
+              <button class="button is-medium is-link" id="loadBtn" disabled>Load Trace</button>
+            </div>
+
+            <!-- Expert trace step -->
+            <div class="control">
+              <button class="button is-medium is-info" id="nextStepBtn" disabled>Trace Next Step</button>
+            </div>
+
+            <!-- Model picker -->
+            <div class="control">
+              <span class="select is-medium">
+                <select id="modelSelect">
+                  <option value="modelA.zip">Model A (AP2T -> C2T)</option>
+                  <option value="modelB.zip">Model B (C2T -> AP2T)</option>
+                  <option value="modelX.zip">Model X (NWT -> AP2T)</option>
+                </select>
+              </span>
+            </div>
+
+            <!-- Agent infer and reset -->
+            <div class="control">
+              <button class="button is-medium is-success" id="inferenceBtn" disabled>Agent Next Step</button>
+            </div>
+            <div class="control">
+              <button class="button is-medium is-warning" id="resetBtn" disabled>Reset</button>
+            </div>
           </div>
-          <div id="cy" style="width:100%; height:600px; border:1px solid #ccc; margin-bottom:1em;"></div>
+
+          <div id="cy"></div>
           <pre id="output"></pre>
         </div>
+
         <div class="column is-one-quarter">
           <div id="gadget-info" class="box">
             <strong>Initial Gadgets:</strong>
@@ -43,13 +107,14 @@
             <strong>Target Gadget:</strong>
             <div id="target-gadget"></div>
           </div>
-          <div id="model-suggestion-box" style="margin-top: 12px;">
-          <div id="model-suggestion" style="color: red; font-family: monospace;"></div>
-          <ul id="top-actions" style="list-style-type: none; padding-left: 0; font-family: monospace; margin-top: 8px;"></ul>
-          </div>
 
+          <div id="model-suggestion-box" class="mt-4">
+            <div id="model-suggestion" class="has-text-danger has-text-monospace"></div>
+            <ul id="top-actions" class="mt-2 has-text-monospace" style="list-style: none; padding-left: 0;"></ul>
+          </div>
         </div>
       </div>
     </div>
   </section>
 </body>
+</html>

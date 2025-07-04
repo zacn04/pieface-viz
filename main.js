@@ -2,6 +2,8 @@
 
 const API_BASE = "https://api.pieface.ai"; 
 
+const modelSelect = document.getElementById('modelSelect');
+
 
 // Helper: position ports in a circle around the gadget
 function getPortPosition(gadgetPos, idx) {
@@ -440,7 +442,9 @@ async function fetchEnvState() {
 
 async function inferModelStep() {
   try {
-    const response = await fetch(`${API_BASE}/infer_next_step`, { method: 'POST' });
+    const modelName = modelSelect.value;
+    const response = await fetch(`${API_BASE}/infer_next_step`, 
+      { method: 'POST', 'headers': {'Content-Type': 'application/json'}, body: JSON.stringify({ model: modelName }) });
     const data = await response.json();
 
     const suggestionDiv = document.getElementById("model-suggestion");
