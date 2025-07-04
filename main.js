@@ -2,6 +2,7 @@
 
 const API_BASE = "https://api.pieface.ai"; 
 
+
 const modelSelect = document.getElementById('modelSelect');
 
 
@@ -475,6 +476,18 @@ async function inferModelStep() {
     acceptBtn.textContent = "Accept agent action";
     acceptBtn.classList.add("button", "is-small", "is-success");
 
+    const denyBtn = document.createElement("button");
+    denyBtn.textContent = "Deny agent action";
+    denyBtn.classList.add("button", "is-small", "is-danger");
+    denyBtn.onclick = () => {
+      suggestionDiv.textContent = "Agent action denied.";
+      acceptBtn.remove();
+      denyBtn.remove();
+      document.getElementById("nextStepBtn").disabled = false;
+      document.getElementById("resetBtn").disabled = false;
+    };
+    document.getElementById("model-suggestion-box").appendChild(denyBtn);
+
     
     acceptBtn.onclick = async () => {
     const res = await fetch(`${API_BASE}/apply_action`, {
@@ -490,6 +503,7 @@ async function inferModelStep() {
       renderOp(result.op);
       suggestionDiv.textContent = "";
       acceptBtn.remove();
+      denyBtn.remove();
       document.getElementById("nextStepBtn").disabled = true;
       document.getElementById("resetBtn").disabled = false;
     }
