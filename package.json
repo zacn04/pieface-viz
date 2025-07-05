@@ -1,0 +1,14 @@
+{
+  "name": "pieface-viz",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/src/main.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node dist/tests/helpers.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module"
+}
