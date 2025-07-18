@@ -17,44 +17,6 @@ const GADGET_PORTS = {
     'P2T': 4,
     'NWT': 4,
 };
-function loadTraceFromFile() {
-    return __awaiter(this, void 0, void 0, function* () {
-        return new Promise((resolve, reject) => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.json,.txt';
-            input.onchange = (event) => __awaiter(this, void 0, void 0, function* () {
-                var _a;
-                const file = (_a = event.target.files) === null || _a === void 0 ? void 0 : _a[0];
-                if (!file) {
-                    reject(new Error('No file selected'));
-                    return;
-                }
-                if (file.name.endsWith('.json')) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => __awaiter(this, void 0, void 0, function* () {
-                        try {
-                            const trace = JSON.parse(String(e.target.result));
-                            resolve({ type: 'json', trace });
-                        }
-                        catch (_a) {
-                            reject(new Error('Invalid JSON format'));
-                        }
-                    });
-                    reader.onerror = () => reject(new Error('Error reading file'));
-                    reader.readAsText(file);
-                }
-                else if (file.name.endsWith('.txt')) {
-                    resolve({ type: 'txt', file });
-                }
-                else {
-                    reject(new Error('Unsupported file type'));
-                }
-            });
-            input.click();
-        });
-    });
-}
 const gadgets = {};
 let gadgetIdCounter = 0;
 const combinedGroups = [];
@@ -93,58 +55,29 @@ function setLoading(isLoading, message = '') {
     }
 }
 function setButtonsEnabled(enabled) {
-    document.getElementById('nextStepBtn').disabled = !enabled;
     document.getElementById('resetBtn').disabled = !enabled;
     document.getElementById('inferenceBtn').disabled = !enabled;
 }
-function handleLoadTrace() {
+// Refactored: initFromBackend now takes env_state and selected gadgets as arguments
+function initFromBackend(env_state, initialGadgets, targetGadget) {
     return __awaiter(this, void 0, void 0, function* () {
-        setLoading(true, 'Loading trace file...');
-        try {
-            const result = yield loadTraceFromFile();
-            if (result.type === 'json') {
-                setLoading(true, 'Uploading trace to backend...');
-                yield sendTraceToBackend(result.trace);
-            }
-            else if (result.type === 'txt') {
-                setLoading(true, 'Uploading txt trace to backend...');
-                const formData = new FormData();
-                formData.append('file', result.file);
-                const res = yield fetch(`${API_BASE}/upload_txt_trace`, { method: 'POST', body: formData });
-                if (!res.ok)
-                    throw new Error('Failed to upload txt trace to backend');
-            }
-            traceLoaded = true;
-            setButtonsEnabled(true);
-            yield initFromBackend();
-            setLoading(false);
-        }
-        catch (err) {
-            setLoading(false);
-            traceLoaded = false;
-            setButtonsEnabled(false);
-            document.getElementById('output').textContent = 'Failed to load trace: ' + err.message;
-        }
-    });
-}
-function updateGadgetInfo(meta) {
-    const initialList = document.getElementById('initial-gadgets');
-    initialList.innerHTML = '';
-    (meta.initial_gadgets || []).forEach((g) => {
-        const li = document.createElement('li');
-        li.textContent = typeof g === 'string' ? g : (g.label || g.id || JSON.stringify(g));
-        initialList.appendChild(li);
-    });
-    document.getElementById('target-gadget').textContent = meta.target || 'Unknown';
-}
-function initFromBackend() {
-    return __awaiter(this, void 0, void 0, function* () {
+        var _a;
         setLoading(true, 'Initializing from backend...');
-        const res = yield fetch(`${API_BASE}/trace_meta`);
-        const meta = yield res.json();
-        updateGadgetInfo(meta);
+        // Use provided env_state or fallback to empty
+        const state = env_state || {};
+        const initials = initialGadgets || (state.gadgets || []);
+        const target = targetGadget || (state.target_gadget || (state.gadgets && ((_a = state.gadgets[0]) === null || _a === void 0 ? void 0 : _a.type)) || 'Unknown');
+        // Update info panels
+        const initialList = document.getElementById('initial-gadgets');
+        initialList.innerHTML = '';
+        initials.forEach((g) => {
+            const li = document.createElement('li');
+            li.textContent = typeof g === 'string' ? g : (g.type || g.label || g.id || JSON.stringify(g));
+            initialList.appendChild(li);
+        });
+        document.getElementById('target-gadget').textContent = target;
+        // Populate the graph
         traceLoaded = true;
-        const initials = meta.initial_gadgets || [];
         const w = cy.width(), h = cy.height();
         const spacing = 150;
         const offset = (initials.length - 1) / 2;
@@ -152,20 +85,21 @@ function initFromBackend() {
         Object.keys(gadgets).forEach(k => delete gadgets[k]);
         gadgetIdCounter = 0;
         initials.forEach((g, i) => {
-            const type = typeof g === 'string' ? g : g.label || g.id;
+            const type = typeof g === 'string' ? g : g.type || g.label || g.id;
             const nodeId = `g${gadgetIdCounter++}`;
             const label = type;
-            const portCount = GADGET_PORTS[type] || 4;
-            const ports = makePortList(portCount);
+            const ports = g.locations || (GADGET_PORTS[type] ? makePortList(GADGET_PORTS[type]) : []);
             const pos = { x: w / 2 + (i - offset) * spacing, y: h / 2 };
-            const portOrigins = ports.map(p => p);
+            const portOrigins = ports.map((p) => p);
             const portMap = {};
-            ports.forEach(p => { portMap[p] = `${nodeId}_port_${p}`; });
+            ports.forEach((p) => { portMap[p] = `${nodeId}_port_${p}`; });
             gadgets[nodeId] = { label, ports: [...ports], pos, type, portOrigins, portMap };
-            addGadgetNode(cy, nodeId, label, pos);
+            addGadgetNode(cy, nodeId, label, pos, type);
             ports.forEach((p, idx) => addPortNode(cy, nodeId, p, idx, ports.length, pos));
         });
-        cy.fit(cy.elements(), 50);
+        cy.resize();
+        cy.fit(cy.elements(), 50); // Fit all elements with padding
+        cy.center(); // Center the graph in the viewport
         setLoading(false);
     });
 }
@@ -211,6 +145,31 @@ function renderOp(op) {
         ];
         cy.$(`#${groupId}`).style({ 'background-opacity': 0, 'border-width': 3, 'border-color': '#888', 'border-style': 'dashed', label: '', 'z-index': 1 });
     }
+    else if (op.op === 'STOP') {
+        // Disable agent/user action buttons
+        document.getElementById('inferenceBtn').disabled = true;
+        // Enable Reset button
+        document.getElementById('resetBtn').disabled = false;
+        // Disable Input Next Step button
+        const inputNextStepBtn = document.getElementById('input-next-step-btn');
+        if (inputNextStepBtn)
+            inputNextStepBtn.disabled = true;
+        // Disable modal input and submit button if modal is open
+        const nextStepInput = document.getElementById('next-step-input');
+        if (nextStepInput)
+            nextStepInput.disabled = true;
+        const submitNextStep = document.getElementById('submit-next-step');
+        if (submitNextStep)
+            submitNextStep.disabled = true;
+        // Remove or disable user action controls if present
+        const userActionInput = document.getElementById('user-action-input');
+        if (userActionInput)
+            userActionInput.disabled = true;
+        const userActionBtn = Array.from(document.getElementsByTagName('button')).find(btn => btn.textContent === 'Submit user action');
+        if (userActionBtn)
+            userActionBtn.setAttribute('disabled', 'true');
+        addCheckSimulationButton();
+    }
     cy.layout({ name: 'preset' }).run();
     cy.fit(cy.elements(), 50);
 }
@@ -219,7 +178,7 @@ function nextStep() {
         if (!traceLoaded)
             return;
         setLoading(true, 'Stepping...');
-        const res = yield fetch(`${API_BASE}/step`, { method: 'POST' });
+        const res = yield fetch(`${API_BASE}/step`, { method: 'POST', credentials: 'include' });
         const { op, done } = yield res.json();
         setLoading(false);
         if (done) {
@@ -230,62 +189,412 @@ function nextStep() {
         renderOp(op);
     });
 }
+function addCheckSimulationButton() {
+    var _a, _b;
+    // Remove if already exists
+    const existing = document.getElementById('check-simulation-btn');
+    if (existing && existing.parentElement)
+        existing.parentElement.remove();
+    const btn = document.createElement('button');
+    btn.id = 'check-simulation-btn';
+    btn.className = 'button is-primary is-medium';
+    btn.textContent = 'Check Simulation';
+    btn.onclick = () => __awaiter(this, void 0, void 0, function* () {
+        btn.disabled = true;
+        const outputElem = document.getElementById('output');
+        outputElem.textContent = 'Checking simulation...';
+        outputElem.style.color = '';
+        try {
+            const res = yield fetch(`${API_BASE}/check_equivalence`, { method: 'POST', credentials: 'include' });
+            const data = yield res.json();
+            if (data.result === true) {
+                outputElem.textContent = 'Simulation result: YES (gadgets are equivalent)';
+                outputElem.style.color = 'green';
+            }
+            else if (data.result === false) {
+                outputElem.textContent = 'Simulation result: NO (gadgets are not equivalent)';
+                outputElem.style.color = 'red';
+            }
+            else if (data.error) {
+                outputElem.textContent = 'Error: ' + data.error;
+                outputElem.style.color = '';
+            }
+            else {
+                outputElem.textContent = 'Unknown response.';
+                outputElem.style.color = '';
+            }
+        }
+        catch (e) {
+            outputElem.textContent = 'Error checking simulation.';
+            outputElem.style.color = '';
+        }
+        finally {
+            btn.disabled = false;
+        }
+    });
+    // Wrap in a .control div
+    const controlDiv = document.createElement('div');
+    controlDiv.className = 'control';
+    controlDiv.appendChild(btn);
+    // Insert after Input Next Step control if present, else after Agent Next Step
+    const controlsGroup = document.querySelector('.controls-group');
+    const inputNextStepControl = (_a = document.getElementById('input-next-step-btn')) === null || _a === void 0 ? void 0 : _a.parentElement;
+    const inferenceControl = (_b = document.getElementById('inferenceBtn')) === null || _b === void 0 ? void 0 : _b.parentElement;
+    if (controlsGroup && inputNextStepControl) {
+        controlsGroup.insertBefore(controlDiv, inputNextStepControl.nextSibling);
+    }
+    else if (controlsGroup && inferenceControl) {
+        controlsGroup.insertBefore(controlDiv, inferenceControl.nextSibling);
+    }
+    else if (controlsGroup) {
+        controlsGroup.appendChild(controlDiv);
+    }
+}
+// Remove Check Simulation button on reset or new session
 function reset() {
     return __awaiter(this, void 0, void 0, function* () {
         if (!traceLoaded)
             return;
         setLoading(true, 'Resetting...');
-        yield fetch(`${API_BASE}/reset`, { method: 'POST' });
+        yield fetch(`${API_BASE}/reset`, { method: 'POST', credentials: 'include' });
         cy.elements().remove();
         document.getElementById('output').textContent = '';
         cy.layout({ name: 'preset' }).run();
         cy.center();
-        yield initFromBackend();
+        // Use the previously selected gadgets
+        if (selectedStart && selectedTarget) {
+            const resp = yield fetch(`${API_BASE}/init_gadgets`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    initial_gadgets: [selectedStart, selectedStart],
+                    target_gadget: selectedTarget
+                }),
+                credentials: 'include',
+            });
+            const { env_state } = yield resp.json();
+            yield initFromBackend(env_state, [selectedStart, selectedStart], selectedTarget);
+        }
+        else {
+            yield initFromBackend();
+        }
+        // Re-enable all action buttons and inputs after reset
+        document.getElementById('inferenceBtn').disabled = false;
+        document.getElementById('resetBtn').disabled = false;
+        const inputNextStepBtn = document.getElementById('input-next-step-btn');
+        if (inputNextStepBtn)
+            inputNextStepBtn.disabled = false;
+        const nextStepInput = document.getElementById('next-step-input');
+        if (nextStepInput)
+            nextStepInput.disabled = false;
+        const submitNextStep = document.getElementById('submit-next-step');
+        if (submitNextStep)
+            submitNextStep.disabled = false;
         setLoading(false);
+        const checkBtn = document.getElementById('check-simulation-btn');
+        if (checkBtn)
+            checkBtn.remove();
     });
 }
+// --- Gadget selection landing page logic ---
+const GADGET_INFO = {
+    AP2T: {
+        name: 'AP2T',
+        desc: 'Anti-Parallel 2-Toggle: Horizontal traversals in opposite directions.'
+    },
+    C2T: {
+        name: 'C2T',
+        desc: 'Crossing 2-Toggle: Diagonal traversals.'
+    },
+    P2T: {
+        name: 'P2T',
+        desc: 'Parallel 2-Toggle: Horizontal traversals in parallel directions.'
+    },
+    NWT: {
+        name: 'NWT',
+        desc: 'Noncrossing-Wire Toggle: Allows a traversal until wire is crossed; crossing again allows re-traversing.'
+    }
+};
+const GADGET_SVGS = {
+    AP2T: `
+    <svg width="90" height="90" viewBox="0 0 90 90">
+      <rect x="15" y="15" width="60" height="60" rx="10" fill="#fff" stroke="#1976d2" stroke-width="3"/>
+      <line x1="15" y1="25" x2="75" y2="25" stroke="#1976d2" stroke-width="7" marker-end="url(#arrow)"/>
+      <line x1="75" y1="65" x2="15" y2="65" stroke="#1976d2" stroke-width="7" marker-end="url(#arrow)"/>
+      <defs>
+        <marker id="arrow" markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 6,3 0,6" fill="#1976d2"/>
+        </marker>
+      </defs>
+    </svg>
+  `,
+    C2T: `
+    <svg width="90" height="90" viewBox="0 0 90 90">
+      <rect x="15" y="15" width="60" height="60" rx="10" fill="#fff" stroke="#388e3c" stroke-width="3"/>
+      <line x1="15" y1="15" x2="75" y2="75" stroke="#388e3c" stroke-width="7" marker-end="url(#arrow)"/>
+      <line x1="75" y1="15" x2="15" y2="75" stroke="#fbc02d" stroke-width="7" marker-end="url(#arrow2)"/>
+      <defs>
+        <marker id="arrow" markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 6,3 0,6" fill="#388e3c"/>
+        </marker>
+        <marker id="arrow2" markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 6,3 0,6" fill="#fbc02d"/>
+        </marker>
+      </defs>
+    </svg>
+  `,
+    P2T: `
+    <svg width="90" height="90" viewBox="0 0 90 90">
+      <rect x="15" y="15" width="60" height="60" rx="10" fill="#fff" stroke="#7b1fa2" stroke-width="3"/>
+      <line x1="15" y1="25" x2="75" y2="25" stroke="#7b1fa2" stroke-width="7" marker-end="url(#arrow)"/>
+      <line x1="15" y1="65" x2="75" y2="65" stroke="#7b1fa2" stroke-width="7" marker-end="url(#arrow)"/>
+      <defs>
+        <marker id="arrow" markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto">
+          <polygon points="0,0 6,3 0,6" fill="#7b1fa2"/>
+        </marker>
+      </defs>
+    </svg>
+  `,
+    NWT: `
+    <svg width="90" height="90" viewBox="0 0 90 90">
+      <rect x="15" y="15" width="60" height="60" rx="10" fill="#fff" stroke="#616161" stroke-width="3"/>
+      <line x1="15" y1="45" x2="75" y2="45" stroke="#616161" stroke-width="7"/>
+      <line x1="45" y1="7" x2="45" y2="23" stroke="#111" stroke-width="7"/>
+    </svg>
+  `
+};
+function renderGadgetCards(containerId, selectType) {
+    console.log('Rendering gadget cards for', containerId);
+    const container = document.getElementById(containerId);
+    if (!container)
+        return;
+    container.innerHTML = '';
+    Object.entries(GADGET_INFO).forEach(([key, info]) => {
+        const card = document.createElement('div');
+        card.className = 'card m-4 p-4';
+        card.style.width = '300px';
+        card.style.minHeight = '200px';
+        card.style.cursor = 'pointer';
+        card.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)';
+        card.style.display = 'flex';
+        card.style.flexDirection = 'column';
+        card.style.justifyContent = 'center';
+        card.style.alignItems = 'flex-start';
+        card.dataset.gadget = key;
+        card.innerHTML = `
+      <div class=\"card-content p-3\">  
+        <div class=\"gadget-svg\" style=\"height: 90px; margin-bottom: 1.2rem;\">${GADGET_SVGS[key]}</div>
+        <p class=\"title is-4\" style=\"font-size: 1.5rem; margin-bottom: 1.2rem;\">${info.name}</p>
+        <p class=\"subtitle is-6\" style=\"font-size: 1.1rem; margin-top: 0.5rem;\">${info.desc}</p>
+      </div>
+    `;
+        card.onclick = () => handleGadgetSelect(key, selectType, card);
+        container.appendChild(card);
+    });
+}
+let selectedStart = null;
+let selectedTarget = null;
+function handleGadgetSelect(gadget, type, card) {
+    if (type === 'start') {
+        selectedStart = gadget;
+        // Highlight only one
+        const allCards = document.querySelectorAll('#start-gadget-cards .card');
+        allCards.forEach(c => c.classList.remove('has-background-info-light'));
+        card.classList.add('has-background-info-light');
+    }
+    else {
+        selectedTarget = gadget;
+        // Highlight only one
+        const allCards = document.querySelectorAll('#target-gadget-cards .card');
+        allCards.forEach(c => c.classList.remove('has-background-success-light'));
+        card.classList.add('has-background-success-light');
+    }
+    updateStartButtonState();
+}
+function updateStartButtonState() {
+    const btn = document.getElementById('startSessionBtn');
+    btn.disabled = !(!!selectedStart && !!selectedTarget);
+}
+// Add modal HTML to the DOM on page load
+function createInputNextStepModal() {
+    const modal = document.createElement('div');
+    modal.id = 'input-next-step-modal';
+    modal.style.display = 'none';
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100vw';
+    modal.style.height = '100vh';
+    modal.style.background = 'rgba(0,0,0,0.4)';
+    modal.style.zIndex = '1000';
+    modal.innerHTML = `
+    <div style="background: #fff; max-width: 480px; margin: 10vh auto; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 16px rgba(0,0,0,0.18); position: relative;">
+      <button id="close-next-step-modal" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+      <h2 class="title is-4">Input Next Step</h2>
+      <input id="next-step-input" class="input mb-2" type="text" placeholder="e.g. COMBINE(g1, g0, rot=2, splice=3)" style="width: 100%;" />
+      <button id="submit-next-step" class="button is-primary mt-2">Submit</button>
+      <div class="mt-4">
+        <strong>Examples:</strong>
+        <ul style="font-size: 0.95em; margin-top: 0.5em;">
+          <li>STOP</li>
+          <li>CONNECT gadget 0 ports 5 and 2</li>
+          <li>COMBINE gadgets 1 and 0 (rot=2, splice=3)</li>
+        </ul>
+      </div>
+    </div>
+  `;
+    document.body.appendChild(modal);
+    // Close modal logic
+    document.getElementById('close-next-step-modal').onclick = () => {
+        modal.style.display = 'none';
+    };
+    // Submit logic
+    document.getElementById('submit-next-step').onclick = () => __awaiter(this, void 0, void 0, function* () {
+        const input = document.getElementById('next-step-input').value.trim();
+        if (!input) {
+            alert('Please enter an action.');
+            return;
+        }
+        const res = yield fetch(`${API_BASE}/apply_action`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: input, actor: 'user' }),
+            credentials: 'include',
+        });
+        const result = yield res.json();
+        if (!result.success) {
+            alert('Failed: ' + (result.error || 'Unknown error'));
+        }
+        else {
+            renderOp(result.op);
+            modal.style.display = 'none';
+            document.getElementById('next-step-input').value = '';
+        }
+    });
+}
+// Add the button to open the modal
+function addInputNextStepButton() {
+    var _a;
+    const btn = document.createElement('button');
+    btn.id = 'input-next-step-btn';
+    btn.className = 'button is-info is-medium';
+    btn.textContent = 'Input Next Step';
+    btn.onclick = () => {
+        const modal = document.getElementById('input-next-step-modal');
+        modal.style.display = 'block';
+        document.getElementById('next-step-input').focus();
+    };
+    // Wrap in a .control div
+    const controlDiv = document.createElement('div');
+    controlDiv.className = 'control';
+    controlDiv.appendChild(btn);
+    // Insert after the Agent Next Step control
+    const controlsGroup = document.querySelector('.controls-group');
+    const inferenceControl = (_a = document.getElementById('inferenceBtn')) === null || _a === void 0 ? void 0 : _a.parentElement;
+    if (controlsGroup && inferenceControl) {
+        controlsGroup.insertBefore(controlDiv, inferenceControl.nextSibling);
+    }
+    else if (controlsGroup) {
+        controlsGroup.appendChild(controlDiv);
+    }
+}
 document.addEventListener('DOMContentLoaded', () => {
+    // Hide simulation UI until session started
+    const simSection = document.querySelectorAll('.section');
+    if (simSection.length > 1)
+        simSection[1].style.display = 'none';
+    // Add back arrow button logic
+    const backBtn = document.getElementById('back-to-gadget-select');
+    if (backBtn)
+        backBtn.style.display = 'none'; // Hide by default
+    if (backBtn) {
+        backBtn.onclick = () => {
+            // Hide simulation section, show landing section
+            if (simSection.length > 1)
+                simSection[1].style.display = 'none';
+            const landingSection = document.getElementById('landing-section');
+            if (landingSection)
+                landingSection.style.display = '';
+            // Reset state
+            traceLoaded = false;
+            cy.elements().remove();
+            document.getElementById('output').textContent = '';
+            document.getElementById('inferenceBtn').disabled = true;
+            document.getElementById('resetBtn').disabled = true;
+            const inputNextStepBtn = document.getElementById('input-next-step-btn');
+            if (inputNextStepBtn)
+                inputNextStepBtn.disabled = true;
+            const nextStepInput = document.getElementById('next-step-input');
+            if (nextStepInput)
+                nextStepInput.disabled = true;
+            const submitNextStep = document.getElementById('submit-next-step');
+            if (submitNextStep)
+                submitNextStep.disabled = true;
+            // Hide back arrow again
+            if (backBtn)
+                backBtn.style.display = 'none';
+        };
+    }
     setButtonsEnabled(false);
-    const sel = document.getElementById('traceSelect');
-    const loadBtn = document.getElementById('loadBtn');
-    const nextBtn = document.getElementById('nextStepBtn');
+    // Remove nextBtn event listener since nextStepBtn no longer exists
     const resetBtn = document.getElementById('resetBtn');
     const inferenceBtn = document.getElementById('inferenceBtn');
-    nextBtn.addEventListener('click', nextStep);
+    // nextBtn.addEventListener('click', nextStep); // REMOVE THIS LINE
     resetBtn.addEventListener('click', reset);
     inferenceBtn.addEventListener('click', inferModelStep);
-    function populateTraceDropdown() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const res = yield fetch(`${API_BASE}/list_traces`);
-            const traces = yield res.json();
-            traces.forEach((name) => {
-                const opt = document.createElement('option');
-                opt.value = name;
-                opt.textContent = name;
-                sel.appendChild(opt);
+    // Remove all legacy code and comments related to traces, trace upload/selection, and unused/commented-out code.
+    // Only keep code relevant to gadget selection, agent/user action, and simulation flow.
+    renderGadgetCards('start-gadget-cards', 'start');
+    renderGadgetCards('target-gadget-cards', 'target');
+    const startBtn = document.getElementById('startSessionBtn');
+    if (startBtn) {
+        startBtn.addEventListener('click', () => __awaiter(void 0, void 0, void 0, function* () {
+            if (!selectedStart || !selectedTarget)
+                return;
+            setLoading(true, 'Initializing environment...');
+            const resp = yield fetch(`${API_BASE}/init_gadgets`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    initial_gadgets: [selectedStart, selectedStart],
+                    target_gadget: selectedTarget
+                }),
+                credentials: 'include',
             });
-        });
+            if (!resp.ok) {
+                setLoading(false);
+                alert('Failed to initialize environment');
+                return;
+            }
+            yield fetch(`${API_BASE}/reset`, { method: 'POST', credentials: 'include' });
+            const { env_state } = yield resp.json();
+            document.getElementById('landing-section').style.display = 'none';
+            const simSection = document.querySelectorAll('.section');
+            if (simSection.length > 1)
+                simSection[1].style.display = '';
+            // Show back arrow now that session has started
+            if (backBtn)
+                backBtn.style.display = '';
+            traceLoaded = true;
+            setButtonsEnabled(true);
+            yield initFromBackend(env_state, [selectedStart, selectedStart], selectedTarget);
+            setLoading(false);
+        }));
     }
-    sel.addEventListener('change', () => {
-        loadBtn.disabled = sel.value === '';
-    });
-    loadBtn.addEventListener('click', () => __awaiter(void 0, void 0, void 0, function* () {
-        setLoading(true, `Loading ${sel.value}...`);
-        yield fetch(`${API_BASE}/select_trace`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: sel.value }) });
-        yield fetch(`${API_BASE}/reset`, { method: 'POST' });
-        traceLoaded = true;
-        setButtonsEnabled(true);
-        yield initFromBackend();
-        setLoading(false);
-    }));
-    populateTraceDropdown();
+    createInputNextStepModal();
+    addInputNextStepButton();
 });
 function inferModelStep() {
     return __awaiter(this, void 0, void 0, function* () {
         var _a, _b;
         try {
             const modelName = modelSelect === null || modelSelect === void 0 ? void 0 : modelSelect.value;
-            const response = yield fetch(`${API_BASE}/infer_next_step`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: modelName }) });
+            const response = yield fetch(`${API_BASE}/infer_next_step`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: modelName }),
+                credentials: 'include',
+            });
             const data = yield response.json();
             const suggestionDiv = document.getElementById('model-suggestion');
             const topActionsList = document.getElementById('top-actions');
@@ -313,12 +622,17 @@ function inferModelStep() {
                 suggestionDiv.textContent = 'Agent action denied.';
                 acceptBtn.remove();
                 denyBtn.remove();
-                document.getElementById('nextStepBtn').disabled = false;
                 document.getElementById('resetBtn').disabled = false;
+                document.getElementById('inferenceBtn').disabled = false;
             };
             (_a = document.getElementById('model-suggestion-box')) === null || _a === void 0 ? void 0 : _a.appendChild(denyBtn);
             acceptBtn.onclick = () => __awaiter(this, void 0, void 0, function* () {
-                const res = yield fetch(`${API_BASE}/apply_action`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: suggestion, actor: 'agent' }) });
+                const res = yield fetch(`${API_BASE}/apply_action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: suggestion, actor: 'agent' }),
+                    credentials: 'include',
+                });
                 const result = yield res.json();
                 if (!result.success) {
                     alert('Failed: ' + result.error);
@@ -328,8 +642,8 @@ function inferModelStep() {
                     suggestionDiv.textContent = '';
                     acceptBtn.remove();
                     denyBtn.remove();
-                    document.getElementById('nextStepBtn').disabled = true;
                     document.getElementById('resetBtn').disabled = false;
+                    document.getElementById('inferenceBtn').disabled = false;
                 }
             });
             (_b = document.getElementById('model-suggestion-box')) === null || _b === void 0 ? void 0 : _b.appendChild(acceptBtn);
@@ -339,6 +653,78 @@ function inferModelStep() {
         }
     });
 }
+function addUserActionControls() {
+    if (document.getElementById("user-action-input"))
+        return;
+    const container = document.getElementById("model-suggestion-box");
+    if (!container)
+        return;
+    const userActionInput = document.createElement("input");
+    userActionInput.type = "text";
+    userActionInput.id = "user-action-input";
+    userActionInput.placeholder = "Enter your own action";
+    userActionInput.className = "input is-small mt-2 mb-2";
+    const userActionBtn = document.createElement("button");
+    userActionBtn.textContent = "Submit user action";
+    userActionBtn.className = "button is-small is-info ml-2";
+    userActionBtn.onclick = submitUserAction;
+    container.appendChild(userActionInput);
+    container.appendChild(userActionBtn);
+}
+function submitUserAction() {
+    return __awaiter(this, void 0, void 0, function* () {
+        // --- Auto-deny agent action ---
+        // Clear agent suggestion text
+        const suggestionDiv = document.getElementById("model-suggestion");
+        if (suggestionDiv)
+            suggestionDiv.textContent = "";
+        // Remove accept/deny buttons if present
+        const suggestionBox = document.getElementById("model-suggestion-box");
+        if (suggestionBox) {
+            Array.from(suggestionBox.getElementsByTagName("button")).forEach(btn => {
+                if (btn.textContent === "Accept agent action" || btn.textContent === "Deny agent action") {
+                    btn.remove();
+                }
+            });
+        }
+        // Clear top 5 suggestions
+        const topActionsList = document.getElementById("top-actions");
+        if (topActionsList)
+            topActionsList.innerHTML = "";
+        // Remove user input box and button
+        const userActionInput = document.getElementById("user-action-input");
+        if (userActionInput)
+            userActionInput.remove();
+        if (suggestionBox) {
+            Array.from(suggestionBox.getElementsByTagName("button")).forEach(btn => {
+                if (btn.textContent === "Submit user action") {
+                    btn.remove();
+                }
+            });
+        }
+        const input = userActionInput;
+        if (!input)
+            return;
+        const action = input.value.trim();
+        if (!action) {
+            alert("Please enter an action.");
+            return;
+        }
+        const res = yield fetch(`${API_BASE}/apply_action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, actor: "user" }),
+            credentials: 'include',
+        });
+        const result = yield res.json();
+        if (!result.success) {
+            alert("Failed: " + result.error);
+        }
+        else {
+            renderOp(result.op); // Update UI with new state
+            // input.value = ""; // No need to clear since input is removed
+        }
+    });
+}
 window.nextStep = nextStep;
 window.reset = reset;
-window.handleLoadTrace = handleLoadTrace;

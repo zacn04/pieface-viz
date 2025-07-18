@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>PIEFACE v0.4</title>
+  <title>PIEFACE v1.0</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
   <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
   <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
   <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
   <script type="module" src="dist/src/main.js"></script>
 
-  <meta property="og:title" content="PIEFACE: RL Trace Visualizer">
+  <meta property="og:title" content="PIEFACE: RL for Gadget Search">
   <meta property="og:description" content="Built at MIT CSAIL, PIEFACE helps debug RL agents trained for symbolic reasoning tasks.">
   <meta property="og:url" content="https://pieface.ai">
   <meta property="og:type" content="website">
@@ -37,7 +37,7 @@
     /* just tighter borders on the graph area */
     #cy {
       width: 100%;
-      height: 600px;
+      height: 350px;
       border: 1px solid #ddd;
       border-radius: 4px;
       margin-bottom: 1rem;
@@ -46,11 +46,34 @@
 </head>
 
 <body>
+  <section class="section" id="landing-section">
+    <div class="container">
+      <h2 class="title is-4">Select Starting and Target Gadget Types</h2>
+      <div class="columns">
+        <div class="column">
+          <h3 class="subtitle is-6">Starting Gadget Type:</h3>
+          <div id="start-gadget-cards" class="columns is-multiline">
+            <!-- Gadget cards will be inserted here by JS -->
+          </div>
+        </div>
+        <div class="column">
+          <h3 class="subtitle is-6">Target Gadget Type:</h3>
+          <div id="target-gadget-cards" class="columns is-multiline">
+            <!-- Gadget cards will be inserted here by JS -->
+          </div>
+        </div>
+      </div>
+      <button class="button is-primary mt-3" id="startSessionBtn" disabled>Start</button>
+    </div>
+  </section>
   <section class="section">
     <div class="container">
       <div class="level mb-4">
-        <h1 class="title level-left mb-0">PIEFACE v0.4</h1>
+        <h1 class="title level-left mb-0">PIEFACE v1.0</h1>
         <div class="level-right">
+          <button id="back-to-gadget-select" class="button is-small is-light" style="display:none;">
+            <span style="font-size: 1.2rem; line-height: 1;">&#8592;</span> Back
+          </button>
           <a href="info.html" class="button is-small is-light">About</a>
         </div>
       </div>
@@ -58,23 +81,6 @@
       <div class="columns is-variable is-6">
         <div class="column is-three-quarters">
           <div class="controls-group">
-            <!-- Trace selector + load -->
-            <div class="control">
-              <span class="select is-medium">
-                <select id="traceSelect">
-                  <option value="" disabled selected>Select a trace</option>
-                  <!-- … -->
-                </select>
-              </span>
-            </div>
-            <div class="control">
-              <button class="button is-medium is-link" id="loadBtn" disabled>Load Trace</button>
-            </div>
-
-            <!-- Expert trace step -->
-            <div class="control">
-              <button class="button is-medium is-info" id="nextStepBtn" disabled>Trace Next Step</button>
-            </div>
 
             <!-- Model picker -->
             <div class="control">
@@ -94,6 +100,7 @@
             <div class="control">
               <button class="button is-medium is-warning" id="resetBtn" disabled>Reset</button>
             </div>
+            <!-- The Input Next Step button will be injected by JS next to inferenceBtn -->
           </div>
 
           <div id="cy"></div>
