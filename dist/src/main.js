@@ -624,9 +624,18 @@ function inferModelStep() {
                 denyBtn.remove();
                 document.getElementById('resetBtn').disabled = false;
                 document.getElementById('inferenceBtn').disabled = false;
+                /*
+                const res = yield fetch(`${API_BASE}/rlhf_response`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: suggestion, response: False}),
+                    credentials: 'include',
+                }
+                */  
             };
             (_a = document.getElementById('model-suggestion-box')) === null || _a === void 0 ? void 0 : _a.appendChild(denyBtn);
             acceptBtn.onclick = () => __awaiter(this, void 0, void 0, function* () {
+                
                 const res = yield fetch(`${API_BASE}/apply_action`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -645,6 +654,16 @@ function inferModelStep() {
                     document.getElementById('resetBtn').disabled = false;
                     document.getElementById('inferenceBtn').disabled = false;
                 }
+                // here we need to pass stuff to the model for RLHF as well as do this action.
+                /* 
+                const second_res = yield fetch(`${API_BASE}/rlhf_response`, {   // or some shit like that 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: suggestion, response: True }),
+                    // perhaps also encode the state. but i think this is already handled on the server
+                    credentials: 'include',
+                });
+                */
             });
             (_b = document.getElementById('model-suggestion-box')) === null || _b === void 0 ? void 0 : _b.appendChild(acceptBtn);
         }
