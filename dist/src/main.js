@@ -584,89 +584,107 @@ document.addEventListener('DOMContentLoaded', () => {
     createInputNextStepModal();
     addInputNextStepButton();
 });
-function inferModelStep() {
-    return __awaiter(this, void 0, void 0, function* () {
-        var _a, _b;
-        try {
-            const modelName = modelSelect === null || modelSelect === void 0 ? void 0 : modelSelect.value;
-            const response = yield fetch(`${API_BASE}/infer_next_step`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: modelName }),
-                credentials: 'include',
-            });
-            const data = yield response.json();
-            const suggestionDiv = document.getElementById('model-suggestion');
-            const topActionsList = document.getElementById('top-actions');
-            suggestionDiv.textContent = '';
-            topActionsList.innerHTML = '';
-            if (data.description) {
-                suggestionDiv.innerHTML = `Model suggests: ${data.description}<span title="${data.tooltip || ''}" style="cursor: help;">- confused?</span>`;
-            }
-            if (data.top_actions) {
-                data.top_actions.forEach(({ action_desc, confidence }) => {
-                    const li = document.createElement('li');
-                    li.textContent = `${action_desc} (${(confidence * 100).toFixed(1)}%)`;
-                    topActionsList.appendChild(li);
-                });
-            }
-            const suggestion = data.description;
-            document.getElementById('model-suggestion').textContent = suggestion;
-            const acceptBtn = document.createElement('button');
-            acceptBtn.textContent = 'Accept agent action';
-            acceptBtn.classList.add('button', 'is-small', 'is-success');
-            const denyBtn = document.createElement('button');
-            denyBtn.textContent = 'Deny agent action';
-            denyBtn.classList.add('button', 'is-small', 'is-danger');
-            denyBtn.onclick = () => {
-                suggestionDiv.textContent = 'Agent action denied.';
-                acceptBtn.remove();
-                denyBtn.remove();
-                document.getElementById('resetBtn').disabled = false;
-                document.getElementById('inferenceBtn').disabled = false;
-                const res = yield fetch(`${API_BASE}/rlhf_response`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: suggestion, response: False}),
-                    credentials: 'include',
-                });
-    };
-            (_a = document.getElementById('model-suggestion-box')) === null || _a === void 0 ? void 0 : _a.appendChild(denyBtn);
-            acceptBtn.onclick = () => __awaiter(this, void 0, void 0, function* () {
-                
-                const res = yield fetch(`${API_BASE}/apply_action`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: suggestion, actor: 'agent' }),
-                    credentials: 'include',
-                });
-                const result = yield res.json();
-                if (!result.success) {
-                    alert('Failed: ' + result.error);
-                }
-                else {
-                    renderOp(result.op);
-                    suggestionDiv.textContent = '';
-                    acceptBtn.remove();
-                    denyBtn.remove();
-                    document.getElementById('resetBtn').disabled = false;
-                    document.getElementById('inferenceBtn').disabled = false;
-                }
-                // here we need to pass stuff to the model for RLHF as well as do this action.
-                const second_res = yield fetch(`${API_BASE}/rlhf_response`, {   
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: suggestion, response: True }),
-                    // perhaps also encode the state. but i think this is already handled on the server
-                    credentials: 'include',
-                });
-            });
-            (_b = document.getElementById('model-suggestion-box')) === null || _b === void 0 ? void 0 : _b.appendChild(acceptBtn);
-        }
-        catch (err) {
-            console.error('Error fetching model suggestion:', err);
-        }
+async function inferModelStep() {
+  try {
+    const modelName = modelSelect?.value;
+    const resp = await fetch(`${API_BASE}/infer_next_step`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelName }),
+      credentials: 'include',
     });
+    const data = await resp.json();
+
+    const suggestionDiv = document.getElementById('model-suggestion');
+    const suggestionBox = document.getElementById('model-suggestion-box');
+    const topActionsList = document.getElementById('top-actions');
+
+    suggestionDiv.textContent = '';
+    topActionsList.innerHTML = '';
+
+    if (data.description) {
+      suggestionDiv.innerHTML =
+        `Model suggests: ${data.description}<span title="${data.tooltip || ''}" style="cursor: help;"> - confused?</span>`;
+    }
+    if (Array.isArray(data.top_actions)) {
+      data.top_actions.forEach(({ action_desc, confidence }) => {
+        const li = document.createElement('li');
+        li.textContent = `${action_desc} (${(confidence * 100).toFixed(1)}%)`;
+        topActionsList.appendChild(li);
+      });
+    }
+
+    const suggestion = data.description || '';
+
+    const acceptBtn = document.createElement('button');
+    acceptBtn.textContent = 'Accept agent action';
+    acceptBtn.classList.add('button', 'is-small', 'is-success');
+
+    const denyBtn = document.createElement('button');
+    denyBtn.textContent = 'Deny agent action';
+    denyBtn.classList.add('button', 'is-small', 'is-danger');
+
+    denyBtn.onclick = async () => {
+      try {
+        suggestionDiv.textContent = 'Agent action denied.';
+        await fetch(`${API_BASE}/rlhf_response`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ action: suggestion, response: false }),
+        });
+      } catch (e) {
+        console.error('rlhf_response (deny) failed', e);
+      } finally {
+        acceptBtn.remove();
+        denyBtn.remove();
+        document.getElementById('resetBtn').disabled = false;
+        document.getElementById('inferenceBtn').disabled = false;
+      }
+    };
+
+    acceptBtn.onclick = async () => {
+      try {
+        acceptBtn.disabled = true;
+        denyBtn.disabled  = true;
+
+        // apply the action
+        const res = await fetch(`${API_BASE}/apply_action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ action: suggestion, actor: 'agent' }),
+        });
+        const result = await res.json();
+        if (!result.success) {
+          alert('Failed: ' + result.error);
+          return;
+        }
+        renderOp(result.op);
+
+        // log RLHF accept
+        await fetch(`${API_BASE}/rlhf_response`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ action: suggestion, response: true }),
+        });
+      } catch (e) {
+        console.error('accept flow failed', e);
+      } finally {
+        suggestionDiv.textContent = '';
+        acceptBtn.remove();
+        denyBtn.remove();
+        document.getElementById('resetBtn').disabled = false;
+        document.getElementById('inferenceBtn').disabled = false;
+      }
+    };
+
+    suggestionBox?.appendChild(denyBtn);
+    suggestionBox?.appendChild(acceptBtn);
+  } catch (err) {
+    console.error('Error fetching model suggestion:', err);
+  }
 }
 function addUserActionControls() {
     if (document.getElementById("user-action-input"))
