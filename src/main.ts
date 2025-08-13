@@ -148,11 +148,11 @@ function renderMetrics(m: any): void {
   const d = hp - bp;
 
   const basePctEl = document.getElementById('m-base-pct');
-  const baseBarEl = document.getElementById('m-base-bar') as HTMLProgressElement;
+  const baseBarEl = document.getElementById('m-base-bar') as HTMLProgressElement | null;
   const baseNEl = document.getElementById('m-base-n');
 
   const rlhfPctEl = document.getElementById('m-rlhf-pct');
-  const rlhfBarEl = document.getElementById('m-rlhf-bar') as HTMLProgressElement;
+  const rlhfBarEl = document.getElementById('m-rlhf-bar') as HTMLProgressElement | null;
   const rlhfNEl = document.getElementById('m-rlhf-n');
 
   const deltaEl = document.getElementById('m-delta');
@@ -161,15 +161,15 @@ function renderMetrics(m: any): void {
   if (!basePctEl) return; // panel not on page
 
   basePctEl.textContent = `${bp}%`;
-  baseBarEl.value = bp;
-  baseNEl.textContent = `n = ${b.n || 0}`;
+  if (baseBarEl) baseBarEl.value = bp;
+  if (baseNEl) baseNEl.textContent = `n = ${b.n || 0}`;
 
-  rlhfPctEl.textContent = `${hp}%`;
-  rlhfBarEl.value = hp;
-  rlhfNEl.textContent = `n = ${h.n || 0}`;
+  if (rlhfPctEl) rlhfPctEl.textContent = `${hp}%`;
+  if (rlhfBarEl) rlhfBarEl.value = hp;
+  if (rlhfNEl) rlhfNEl.textContent = `n = ${h.n || 0}`;
 
-  deltaEl.textContent = _fmtDelta(d);
-  updEl.textContent = `Last 200 episodes • refreshed ${new Date().toLocaleTimeString()}`;
+  if (deltaEl) deltaEl.textContent = _fmtDelta(d);
+  if (updEl) updEl.textContent = `Last 200 episodes • refreshed ${new Date().toLocaleTimeString()}`;
 }
 
 async function refreshMetrics(): Promise<void> {
