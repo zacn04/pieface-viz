@@ -812,6 +812,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const simSection = document.querySelectorAll('.section');
   if (simSection.length > 1) (simSection[1] as HTMLElement).style.display = 'none';
 
+  
+
   const backBtn = document.getElementById('back-to-gadget-select') as HTMLButtonElement | null;
   if (backBtn) {
     backBtn.style.display = 'none';
@@ -869,6 +871,10 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('landing-section')!.style.display = 'none';
       const simSection = document.querySelectorAll('.section');
       if (simSection.length > 1) (simSection[1] as HTMLElement).style.display = '';
+
+      refreshMetrics();
+      setInterval(refreshMetrics, 5000);
+      
       if (backBtn) backBtn.style.display = '';
       traceLoaded = true;
       setButtonsEnabled(true);
@@ -878,8 +884,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setupEnhancedInteractions();
     });
   }
-  refreshMetrics();
-  setInterval(refreshMetrics, 5000);
+  
   
   createInputNextStepModal();
   addInputNextStepButton();
