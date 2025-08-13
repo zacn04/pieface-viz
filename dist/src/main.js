@@ -364,7 +364,6 @@ const GADGET_SVGS = {
   `
 };
 function renderGadgetCards(containerId, selectType) {
-    console.log('Rendering gadget cards for', containerId);
     const container = document.getElementById(containerId);
     if (!container)
         return;
@@ -498,6 +497,62 @@ function addInputNextStepButton() {
         controlsGroup.appendChild(controlDiv);
     }
 }
+// ---------- Metrics helpers ----------
+function _pct(x){ return Math.round((x || 0) * 100); }
+function _fmtDelta(pct){ const s = Math.round(pct * 10) / 10; return (s > 0 ? '+' : '') + s + '%'; }
+
+async function fetchMetrics() {
+  const url = `${API_BASE}/metrics`; // If /metrics is same origin, you can use '/metrics' instead
+  const res = await fetch(url, { cache: 'no-store', credentials: 'include' });
+  if (!res.ok) throw new Error('metrics fetch failed');
+  return res.json();
+}
+
+function renderMetrics(m) {
+  const b = m?.baseline || { n: 0, success_rate: 0 };
+  const h = m?.rlhf     || { n: 0, success_rate: 0 };
+
+  const bp = _pct(b.success_rate);
+  const hp = _pct(h.success_rate);
+  const d  = hp - bp;
+
+  const basePctEl = document.getElementById('m-base-pct');
+  const baseBarEl = document.getElementById('m-base-bar');
+  const baseNEl   = document.getElementById('m-base-n');
+
+  const rlhfPctEl = document.getElementById('m-rlhf-pct');
+  const rlhfBarEl = document.getElementById('m-rlhf-bar');
+  const rlhfNEl   = document.getElementById('m-rlhf-n');
+
+  const deltaEl   = document.getElementById('m-delta');
+  const updEl     = document.getElementById('m-updated');
+
+  if (!basePctEl) return; // panel not on page
+
+  basePctEl.textContent = `${bp}%`;
+  baseBarEl.value = bp;
+  baseNEl.textContent = `n = ${b.n || 0}`;
+
+  rlhfPctEl.textContent = `${hp}%`;
+  rlhfBarEl.value = hp;
+  rlhfNEl.textContent = `n = ${h.n || 0}`;
+
+  deltaEl.textContent = _fmtDelta(d);
+  updEl.textContent = `Last 200 episodes • refreshed ${new Date().toLocaleTimeString()}`;
+}
+
+async function refreshMetrics() {
+  try {
+    const m = await fetchMetrics();
+    renderMetrics(m);
+  } catch (e) {
+    console.error(e);
+    const updEl = document.getElementById('m-updated');
+    if (updEl) updEl.textContent = 'Metrics unavailable';
+  }
+}
+// --------------------------------------
+
 document.addEventListener('DOMContentLoaded', () => {
     // Hide simulation UI until session started
     const simSection = document.querySelectorAll('.section');
@@ -536,14 +591,12 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
     setButtonsEnabled(false);
-    // Remove nextBtn event listener since nextStepBtn no longer exists
+    refreshMetrics();
+    setInterval(refreshMetrics, 5000);
     const resetBtn = document.getElementById('resetBtn');
     const inferenceBtn = document.getElementById('inferenceBtn');
-    // nextBtn.addEventListener('click', nextStep); // REMOVE THIS LINE
     resetBtn.addEventListener('click', reset);
     inferenceBtn.addEventListener('click', inferModelStep);
-    // Remove all legacy code and comments related to traces, trace upload/selection, and unused/commented-out code.
-    // Only keep code relevant to gadget selection, agent/user action, and simulation flow.
     renderGadgetCards('start-gadget-cards', 'start');
     renderGadgetCards('target-gadget-cards', 'target');
     const startBtn = document.getElementById('startSessionBtn');

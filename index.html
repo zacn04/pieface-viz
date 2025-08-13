@@ -119,6 +119,30 @@
             <div id="model-suggestion" class="has-text-danger has-text-monospace"></div>
             <ul id="top-actions" class="mt-2 has-text-monospace" style="list-style: none; padding-left: 0;"></ul>
           </div>
+          <div id="metrics-panel" class="box mt-4">
+          <p class="heading">RLHF vs Baseline (last 200 episodes)</p>
+
+          <div class="mb-3">
+            <span class="tag is-light">Baseline</span>
+            <span class="title is-5 ml-2" id="m-base-pct">—</span>
+            <progress class="progress is-link is-small mt-1" id="m-base-bar" value="0" max="100"></progress>
+            <p class="is-size-7 has-text-grey" id="m-base-n">n = —</p>
+          </div>
+
+          <div class="mb-3">
+            <span class="tag is-primary is-light">RLHF</span>
+            <span class="title is-5 ml-2" id="m-rlhf-pct">—</span>
+            <progress class="progress is-primary is-small mt-1" id="m-rlhf-bar" value="0" max="100"></progress>
+            <p class="is-size-7 has-text-grey" id="m-rlhf-n">n = —</p>
+          </div>
+
+          <div>
+            <span class="heading">Δ (RLHF - Baseline)</span>
+            <span class="title is-6 ml-2" id="m-delta">—</span>
+          </div>
+
+          <p class="is-size-7 has-text-grey mt-2" id="m-updated">—</p>
+        </div>
         </div>
       </div>
     </div>
