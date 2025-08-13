@@ -1,3 +1,4 @@
+// main.js - PIEFACE v2.1 with Enhanced Interactions
 import { makePortList } from './helpers.js';
 import {
   addGadgetNode,
@@ -9,19 +10,11 @@ import {
 
 declare const cytoscape: any;
 
-declare global {
-  interface Window {
-    nextStep: () => void;
-    reset: () => void;
-    handleLoadTrace: () => void;
-  }
-}
-
+// API Configuration
 const API_BASE = "https://api.pieface.ai";
-
-
 const modelSelect = document.getElementById('modelSelect') as HTMLSelectElement | null;
 
+// Gadget Configuration
 const GADGET_PORTS: Record<string, number> = {
   'AP2T': 4,
   'C2T': 4,
@@ -29,35 +22,621 @@ const GADGET_PORTS: Record<string, number> = {
   'NWT': 4,
 };
 
+// State Management
 const gadgets: Record<string, any> = {};
 let gadgetIdCounter = 0;
 const combinedGroups: string[][] = [];
 const groupPortMaps: Record<string, any[]> = {};
+let traceLoaded = false;
+let selectedStart: string | null = null;
+let selectedTarget: string | null = null;
 
+// New interaction state
+let currentMode: 'combine' | 'connect' | 'select' = 'combine';
+let draggedGadget: any = null;
+let dragStartPosition: { x: number, y: number } | null = null;
+let connectingPort: any = null;
+let connectionPreview: any = null;
+let actionHistory: any[] = [];
+
+// Initialize Cytoscape
 const cy = cytoscape({
   container: document.getElementById('cy'),
   elements: [],
   style: [
-    { selector: 'node[gadget]', style: { shape: 'rectangle', width: 50, height: 50, 'background-color': '#EEE', 'background-opacity': 0.7, 'border-width': 2, 'border-color': '#555', label: 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'z-index': 10 } },
-    { selector: 'node[port]', style: { shape: 'ellipse', width: 16, height: 16, 'background-color': '#888', 'border-width': 2, 'border-color': '#222', label: 'data(label)', 'font-size': 8, 'z-index': 20 } },
-    { selector: 'edge', style: { 'curve-style': 'unbundled-bezier', 'control-point-step-size': 40, 'edge-distances': 'node-position', 'target-arrow-shape': 'triangle', width: 2, 'z-index': 50 } },
-    { selector: '.highlighted', style: { 'background-color': '#FFD700', 'line-color': '#FFD700', 'transition-property': 'background-color, line-color', 'transition-duration': '0.5s' } }
+    {
+      selector: 'node[gadget]',
+      style: {
+        'shape': 'rectangle',
+        'width': 50,
+        'height': 50,
+        'background-color': '#EEE',
+        'background-opacity': 0.7,
+        'border-width': 2,
+        'border-color': '#555',
+        'label': 'data(label)',
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'z-index': 10
+      }
+    },
+    {
+      selector: 'node[port]',
+      style: {
+        'shape': 'ellipse',
+        'width': 16,
+        'height': 16,
+        'background-color': '#888',
+        'border-width': 2,
+        'border-color': '#222',
+        'label': 'data(label)',
+        'font-size': 8,
+        'z-index': 20
+      }
+    },
+    {
+      selector: 'edge',
+      style: {
+        'curve-style': 'unbundled-bezier',
+        'control-point-step-size': 40,
+        'edge-distances': 'node-position',
+        'target-arrow-shape': 'triangle',
+        'width': 2,
+        'z-index': 50
+      }
+    },
+    {
+      selector: '.dragging',
+      style: {
+        'opacity': 0.5
+      }
+    },
+    {
+      selector: '.drop-target',
+      style: {
+        'border-width': 4,
+        'border-color': '#48c774',
+        'background-color': '#e6ffed'
+      }
+    },
+    {
+      selector: '.connecting',
+      style: {
+        'background-color': '#3273dc',
+        'width': 20,
+        'height': 20
+      }
+    }
   ],
   layout: { name: 'preset' }
 });
 
+// ============= NEW INTERACTION SYSTEM =============
 
-async function sendTraceToBackend(trace: any): Promise<any> {
-  const res = await fetch(`${API_BASE}/upload_trace`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(trace)
+// Initialize interaction modes
+function initializeInteractionModes() {
+  // Create mode selector if it doesn't exist
+  if (!document.querySelector('.mode-selector')) {
+    const controlsGroup = document.querySelector('.controls-group');
+    if (controlsGroup) {
+      const modeSelector = document.createElement('div');
+      modeSelector.className = 'control';
+      modeSelector.innerHTML = `
+        <div class="mode-selector" style="display: inline-flex; border: 1px solid #dbdbdb; border-radius: 4px; overflow: hidden;">
+          <button class="mode-btn active" data-mode="combine" style="padding: 0.5rem 1rem; background: #3273dc; color: white; border: none; cursor: pointer;">
+            🔗 Combine <kbd style="font-size: 0.75rem; margin-left: 0.25rem;">C</kbd>
+          </button>
+          <button class="mode-btn" data-mode="connect" style="padding: 0.5rem 1rem; background: white; border: none; border-left: 1px solid #dbdbdb; cursor: pointer;">
+            ↔️ Connect <kbd style="font-size: 0.75rem; margin-left: 0.25rem;">X</kbd>
+          </button>
+          <button class="mode-btn" data-mode="select" style="padding: 0.5rem 1rem; background: white; border: none; border-left: 1px solid #dbdbdb; cursor: pointer;">
+            👆 Select <kbd style="font-size: 0.75rem; margin-left: 0.25rem;">V</kbd>
+          </button>
+        </div>
+      `;
+      controlsGroup.insertBefore(modeSelector, controlsGroup.firstChild);
+    }
+  }
+
+  // Setup mode button clicks
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.getAttribute('data-mode') as 'combine' | 'connect' | 'select';
+      if (mode) setMode(mode);
+    });
   });
-  if (!res.ok) throw new Error('Failed to upload trace to backend');
-  return res.json();
 }
 
-let traceLoaded = false;
+// Set interaction mode
+function setMode(mode: 'combine' | 'connect' | 'select') {
+  currentMode = mode;
+  
+  // Update button styles
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    const isActive = btn.getAttribute('data-mode') === mode;
+    btn.classList.toggle('active', isActive);
+    (btn as HTMLElement).style.background = isActive ? '#3273dc' : 'white';
+    (btn as HTMLElement).style.color = isActive ? 'white' : 'black';
+  });
+  
+  // Cancel any in-progress actions
+  cancelCurrentAction();
+  
+  // Update status display
+  const modeDescriptions = {
+    'combine': 'COMBINE - Drag one gadget onto another',
+    'connect': 'CONNECT - Click ports to connect them',
+    'select': 'SELECT - Click to inspect elements'
+  };
+  
+  updateStatus(modeDescriptions[mode]);
+}
+
+// Setup Cytoscape drag-drop events
+function setupDragDropEvents() {
+  let isDragging = false;
+  
+  // Drag start
+  cy.on('grab', 'node[gadget]', function(evt: any) {
+    if (currentMode === 'combine') {
+      draggedGadget = evt.target;
+      dragStartPosition = {
+        x: draggedGadget.position('x'),
+        y: draggedGadget.position('y')
+      };
+      isDragging = true;
+      draggedGadget.addClass('dragging');
+      updateStatus('Drop on another gadget to combine');
+    }
+  });
+  
+  // During drag
+  cy.on('drag', 'node[gadget]', function(evt: any) {
+    if (currentMode === 'combine' && isDragging && draggedGadget) {
+      // Check for nearby gadgets
+      cy.nodes('[gadget]').forEach((node: any) => {
+        if (node.id() !== draggedGadget.id()) {
+          const distance = getDistance(
+            draggedGadget.position(),
+            node.position()
+          );
+          
+          if (distance < 80) {
+            node.addClass('drop-target');
+          } else {
+            node.removeClass('drop-target');
+          }
+        }
+      });
+    }
+  });
+  
+  // Drag end
+  cy.on('free', 'node[gadget]', function(evt: any) {
+    if (currentMode === 'combine' && isDragging) {
+      const dropTarget = cy.nodes('.drop-target').first();
+      
+      if (dropTarget && dropTarget.length > 0) {
+        showCombineDialog(draggedGadget.id(), dropTarget.id());
+      }
+      
+      // Reset position
+      if (dragStartPosition) {
+        draggedGadget.position(dragStartPosition);
+      }
+      
+      // Clean up
+      draggedGadget.removeClass('dragging');
+      cy.nodes().removeClass('drop-target');
+      isDragging = false;
+      draggedGadget = null;
+      dragStartPosition = null;
+      updateStatus('COMBINE - Drag one gadget onto another');
+    }
+  });
+}
+
+// Setup port connection events
+function setupConnectionEvents() {
+  // Click on ports
+  cy.on('tap', 'node[port]', function(evt: any) {
+    if (currentMode === 'connect') {
+      evt.stopPropagation();
+      const port = evt.target;
+      
+      if (!connectingPort) {
+        // Start connection
+        connectingPort = port;
+        port.addClass('connecting');
+        updateStatus('Click another port to complete connection');
+        startConnectionPreview(port);
+      } else if (port.id() !== connectingPort.id()) {
+        // Complete connection
+        executeConnect(connectingPort, port);
+        connectingPort.removeClass('connecting');
+        connectingPort = null;
+        clearConnectionPreview();
+        updateStatus('CONNECT - Click ports to connect them');
+      }
+    }
+  });
+  
+  // Mouse move for preview line
+  cy.on('mousemove', function(evt: any) {
+    if (connectingPort && connectionPreview) {
+      updateConnectionPreview(evt.position);
+    }
+  });
+  
+  // Cancel on background click
+  cy.on('tap', function(evt: any) {
+    if (evt.target === cy && connectingPort) {
+      connectingPort.removeClass('connecting');
+      connectingPort = null;
+      clearConnectionPreview();
+      updateStatus('Connection cancelled');
+    }
+  });
+}
+
+// Connection preview
+function startConnectionPreview(port: any) {
+  // Create a temporary edge for preview
+  const pos = port.position();
+  connectionPreview = cy.add({
+    group: 'edges',
+    data: {
+      id: 'preview-edge',
+      source: port.id(),
+      target: port.id()
+    },
+    style: {
+      'line-style': 'dashed',
+      'line-color': '#3273dc',
+      'target-arrow-color': '#3273dc',
+      'opacity': 0.5
+    }
+  });
+}
+
+function updateConnectionPreview(mousePos: any) {
+  if (connectionPreview) {
+    // Create temporary node at mouse position
+    const tempId = 'temp-preview-node';
+    cy.remove(`#${tempId}`);
+    
+    cy.add({
+      group: 'nodes',
+      data: { id: tempId },
+      position: mousePos,
+      style: { 'opacity': 0, 'width': 1, 'height': 1 }
+    });
+    
+    connectionPreview.move({ target: tempId });
+  }
+}
+
+function clearConnectionPreview() {
+  if (connectionPreview) {
+    cy.remove('#preview-edge');
+    cy.remove('#temp-preview-node');
+    connectionPreview = null;
+  }
+}
+
+// Show combine dialog
+function showCombineDialog(gadget1: string, gadget2: string) {
+  // Create dialog if it doesn't exist
+  let dialog = document.getElementById('combine-dialog');
+  if (!dialog) {
+    dialog = document.createElement('div');
+    dialog.id = 'combine-dialog';
+    dialog.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      z-index: 1000;
+      min-width: 300px;
+    `;
+    dialog.innerHTML = `
+      <h3 class="title is-5">Combine Parameters</h3>
+      <div class="field">
+        <label class="label">Rotation (0-3)</label>
+        <input type="range" id="rotation-param" min="0" max="3" value="0" class="slider is-fullwidth">
+        <p class="help">Value: <span id="rotation-value">0</span> (Use ↑↓ arrows)</p>
+      </div>
+      <div class="field">
+        <label class="label">Splice Position (0-3)</label>
+        <input type="range" id="splice-param" min="0" max="3" value="0" class="slider is-fullwidth">
+        <p class="help">Value: <span id="splice-value">0</span> (Use ←→ arrows)</p>
+      </div>
+      <div class="field is-grouped">
+        <div class="control">
+          <button class="button is-primary" id="apply-combine">Apply</button>
+        </div>
+        <div class="control">
+          <button class="button" id="cancel-combine">Cancel</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(dialog);
+    
+    // Setup event listeners
+    const rotSlider = document.getElementById('rotation-param') as HTMLInputElement;
+    const spliceSlider = document.getElementById('splice-param') as HTMLInputElement;
+    
+    rotSlider?.addEventListener('input', () => {
+      const rotValue = document.getElementById('rotation-value');
+      if (rotValue) rotValue.textContent = rotSlider.value;
+    });
+    
+    spliceSlider?.addEventListener('input', () => {
+      const spliceValue = document.getElementById('splice-value');
+      if (spliceValue) spliceValue.textContent = spliceSlider.value;
+    });
+    
+    document.getElementById('apply-combine')?.addEventListener('click', () => {
+      const rot = rotSlider?.value || '0';
+      const splice = spliceSlider?.value || '0';
+      executeCombine(gadget1, gadget2, parseInt(rot), parseInt(splice));
+      dialog!.style.display = 'none';
+    });
+    
+    document.getElementById('cancel-combine')?.addEventListener('click', () => {
+      dialog!.style.display = 'none';
+    });
+  }
+  
+  // Reset and show dialog
+  dialog.style.display = 'block';
+  (document.getElementById('rotation-param') as HTMLInputElement).value = '0';
+  (document.getElementById('splice-param') as HTMLInputElement).value = '0';
+  (document.getElementById('rotation-value') as HTMLElement).textContent = '0';
+  (document.getElementById('splice-value') as HTMLElement).textContent = '0';
+}
+
+// Execute combine action
+async function executeCombine(g1: string, g2: string, rot: number, splice: number) {
+  try {
+    const response = await fetch(`${API_BASE}/apply_action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: `COMBINE(${g1}, ${g2}, rot=${rot}, splice=${splice})`,
+        actor: 'user'
+      }),
+      credentials: 'include'
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+      renderOp(result.op);
+      actionHistory.push(result.op);
+      showToast(`Combined ${g1} with ${g2}`, 'success');
+    } else {
+      showToast('Failed: ' + result.error, 'error');
+    }
+  } catch (error) {
+    console.error('Combine failed:', error);
+    showToast('Network error', 'error');
+  }
+}
+
+// Execute connect action
+async function executeConnect(port1: any, port2: any) {
+  const p1Data = port1.data();
+  const p2Data = port2.data();
+  
+  try {
+    const response = await fetch(`${API_BASE}/apply_action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: `CONNECT(${p1Data.parentGadget}, ${p1Data.label}, ${p2Data.label})`,
+        actor: 'user'
+      }),
+      credentials: 'include'
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+      renderOp(result.op);
+      actionHistory.push(result.op);
+      
+      // Add visual edge
+      addPortEdge(cy, gadgets, p1Data.parentGadget, p1Data.label, p2Data.parentGadget, p2Data.label);
+      
+      showToast(`Connected port ${p1Data.label} to ${p2Data.label}`, 'success');
+    } else {
+      showToast('Failed: ' + result.error, 'error');
+    }
+  } catch (error) {
+    console.error('Connect failed:', error);
+    showToast('Network error', 'error');
+  }
+}
+
+// Keyboard shortcuts
+function setupKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    // Don't trigger if typing in input
+    if ((e.target as HTMLElement).tagName === 'INPUT') return;
+    
+    switch(e.key.toLowerCase()) {
+      case 'c':
+        if (!e.metaKey && !e.ctrlKey) setMode('combine');
+        break;
+      case 'x':
+        setMode('connect');
+        break;
+      case 'v':
+        setMode('select');
+        break;
+      case 's':
+        executeStop();
+        break;
+      case 'z':
+        if (e.metaKey || e.ctrlKey) executeUndo();
+        break;
+      case 'escape':
+        cancelCurrentAction();
+        break;
+      case 'arrowup':
+        adjustDialogParam('rotation', 1);
+        e.preventDefault();
+        break;
+      case 'arrowdown':
+        adjustDialogParam('rotation', -1);
+        e.preventDefault();
+        break;
+      case 'arrowleft':
+        adjustDialogParam('splice', -1);
+        e.preventDefault();
+        break;
+      case 'arrowright':
+        adjustDialogParam('splice', 1);
+        e.preventDefault();
+        break;
+    }
+  });
+}
+
+// Adjust dialog parameters with arrow keys
+function adjustDialogParam(param: 'rotation' | 'splice', delta: number) {
+  const dialog = document.getElementById('combine-dialog');
+  if (dialog && dialog.style.display !== 'none') {
+    const slider = document.getElementById(`${param}-param`) as HTMLInputElement;
+    if (slider) {
+      let value = parseInt(slider.value) + delta;
+      value = Math.max(0, Math.min(3, value));
+      slider.value = value.toString();
+      
+      const display = document.getElementById(`${param}-value`);
+      if (display) display.textContent = value.toString();
+    }
+  }
+}
+
+// Cancel current action
+function cancelCurrentAction() {
+  if (connectingPort) {
+    connectingPort.removeClass('connecting');
+    connectingPort = null;
+    clearConnectionPreview();
+  }
+  
+  if (draggedGadget) {
+    draggedGadget.removeClass('dragging');
+    cy.nodes().removeClass('drop-target');
+    if (dragStartPosition) {
+      draggedGadget.position(dragStartPosition);
+    }
+    draggedGadget = null;
+    dragStartPosition = null;
+  }
+  
+  const dialog = document.getElementById('combine-dialog');
+  if (dialog) dialog.style.display = 'none';
+}
+
+// Execute stop
+async function executeStop() {
+  try {
+    const response = await fetch(`${API_BASE}/apply_action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'STOP', actor: 'user' }),
+      credentials: 'include'
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+      renderOp(result.op);
+      showToast('Simulation stopped', 'success');
+      checkSimulation();
+    }
+  } catch (error) {
+    console.error('Stop failed:', error);
+  }
+}
+
+// Execute undo
+function executeUndo() {
+  if (actionHistory.length > 0) {
+    const lastAction = actionHistory.pop();
+    showToast('Undo: ' + JSON.stringify(lastAction), 'info');
+    // Note: Full undo would require backend support
+  }
+}
+
+// Check simulation
+async function checkSimulation() {
+  try {
+    const res = await fetch(`${API_BASE}/check_equivalence`, {
+      method: 'POST',
+      credentials: 'include'
+    });
+    const data = await res.json();
+    
+    const output = document.getElementById('output');
+    if (output) {
+      if (data.result === true) {
+        output.textContent = '✓ Gadgets are equivalent!';
+        output.style.color = 'green';
+      } else if (data.result === false) {
+        output.textContent = '✗ Gadgets are not equivalent';
+        output.style.color = 'red';
+      } else {
+        output.textContent = 'Simulation check failed';
+      }
+    }
+  } catch (error) {
+    console.error('Check simulation failed:', error);
+  }
+}
+
+// ============= UTILITY FUNCTIONS =============
+
+function getDistance(pos1: {x: number, y: number}, pos2: {x: number, y: number}): number {
+  return Math.sqrt(Math.pow(pos1.x - pos2.x, 2) + Math.pow(pos1.y - pos2.y, 2));
+}
+
+function updateStatus(message: string) {
+  const output = document.getElementById('output');
+  if (output) output.textContent = message;
+}
+
+function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `notification is-${type}`;
+  toast.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 2000;
+    min-width: 250px;
+    animation: slideIn 0.3s ease;
+  `;
+  toast.innerHTML = `
+    <button class="delete"></button>
+    ${message}
+  `;
+  
+  document.body.appendChild(toast);
+  
+  toast.querySelector('.delete')?.addEventListener('click', () => {
+    toast.remove();
+  });
+  
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// ============= ORIGINAL FUNCTIONS (PRESERVED) =============
 
 function setLoading(isLoading: boolean, message = ''): void {
   const output = document.getElementById('output') as HTMLElement;
@@ -73,14 +652,12 @@ function setButtonsEnabled(enabled: boolean): void {
   (document.getElementById('inferenceBtn') as HTMLButtonElement).disabled = !enabled;
 }
 
-// Refactored: initFromBackend now takes env_state and selected gadgets as arguments
 async function initFromBackend(env_state?: any, initialGadgets?: any[], targetGadget?: string): Promise<void> {
   setLoading(true, 'Initializing from backend...');
 
-  // Use provided env_state or fallback to empty
   const state = env_state || {};
   const initials = initialGadgets || (state.gadgets || []);
-  const target = targetGadget || (state.target_gadget || (state.gadgets && state.gadgets[0]?.type) || 'Unknown');
+  const target = targetGadget || (state.target_gadget || 'Unknown');
 
   // Update info panels
   const initialList = document.getElementById('initial-gadgets') as HTMLElement;
@@ -97,9 +674,11 @@ async function initFromBackend(env_state?: any, initialGadgets?: any[], targetGa
   const w = cy.width(), h = cy.height();
   const spacing = 150;
   const offset = (initials.length - 1) / 2;
+  
   cy.elements().remove();
   Object.keys(gadgets).forEach(k => delete gadgets[k]);
   gadgetIdCounter = 0;
+  
   initials.forEach((g: any, i: number) => {
     const type = typeof g === 'string' ? g : g.type || g.label || g.id;
     const nodeId = `g${gadgetIdCounter++}`;
@@ -109,34 +688,30 @@ async function initFromBackend(env_state?: any, initialGadgets?: any[], targetGa
     const portOrigins = ports.map((p: number) => p);
     const portMap: Record<number, string> = {};
     ports.forEach((p: number) => { portMap[p] = `${nodeId}_port_${p}`; });
+    
     gadgets[nodeId] = { label, ports: [...ports], pos, type, portOrigins, portMap };
+    
     addGadgetNode(cy, nodeId, label, pos, type);
     ports.forEach((p: number, idx: number) => addPortNode(cy, nodeId, p, idx, ports.length, pos));
   });
+  
   cy.resize();
-  cy.fit(cy.elements(), 50); // Fit all elements with padding
-  cy.center(); // Center the graph in the viewport
+  cy.fit(cy.elements(), 50);
+  cy.center();
   setLoading(false);
 }
 
 function renderOp(op: any): void {
   (document.getElementById('output') as HTMLElement).textContent = JSON.stringify(op) + '\n';
-  if (op.op === 'CONNECT') {
-    const [, srcIdx, dstIdx] = op.args;
-    const allPorts = Object.values(groupPortMaps).flat();
-    const src = allPorts.find((port: any) => port.port === +srcIdx);
-    const dst = allPorts.find((port: any) => port.port === +dstIdx);
-    if (src && dst) {
-      addPortEdge(cy, gadgets, src.gadget, src.port, dst.gadget, dst.port);
-      cy.$(`#${src.gadget}_port_${src.port}`).addClass('connected');
-      cy.$(`#${dst.gadget}_port_${dst.port}`).addClass('connected');
-    }
-  } else if (op.op === 'COMBINE') {
+  
+  if (op.op === 'COMBINE') {
     const [g1_id, g2_id] = op.args;
     const rot = op.rot || 0;
     const splice = op.splice || 0;
     const g1 = gadgets[g1_id], g2 = gadgets[g2_id];
+    
     if (!g1 || !g2) return;
+    
     const mod = g2.ports.length;
     const g1_new = [
       ...g1.ports.slice(0, splice + 1),
@@ -148,70 +723,107 @@ function renderOp(op: any): void {
     ];
     const g2_new = g2.ports.map((l: number) => ((l + rot) % mod) + splice + 1);
     const g2_orig = g2.portOrigins.map((_: any, i: number, arr: any[]) => arr[(i + rot) % mod]);
+    
     relabelGadgetPorts(cy, gadgets, g1_id, g1_new, g1_orig);
     relabelGadgetPorts(cy, gadgets, g2_id, g2_new, g2_orig);
+    
     const groupId = `group_${g1_id}_${g2_id}`;
     combinedGroups.push([g1_id, g2_id]);
     addCompoundNode(cy, groupId, [g1_id, g2_id]);
+    
     groupPortMaps[groupId] = [
       ...g1_new.map((p: number) => ({ gadget: g1_id, port: p })),
       ...g2_new.map((p: number) => ({ gadget: g2_id, port: p }))
     ];
-    cy.$(`#${groupId}`).style({ 'background-opacity': 0, 'border-width': 3, 'border-color': '#888', 'border-style': 'dashed', label: '', 'z-index': 1 });
+    
+    cy.$(`#${groupId}`).style({
+      'background-opacity': 0,
+      'border-width': 3,
+      'border-color': '#888',
+      'border-style': 'dashed',
+      'label': '',
+      'z-index': 1
+    });
+  } else if (op.op === 'CONNECT') {
+    const [, srcIdx, dstIdx] = op.args;
+    const allPorts = Object.values(groupPortMaps).flat();
+    const src = allPorts.find((port: any) => port.port === +srcIdx);
+    const dst = allPorts.find((port: any) => port.port === +dstIdx);
+    
+    if (src && dst) {
+      addPortEdge(cy, gadgets, src.gadget, src.port, dst.gadget, dst.port);
+      cy.$(`#${src.gadget}_port_${src.port}`).addClass('connected');
+      cy.$(`#${dst.gadget}_port_${dst.port}`).addClass('connected');
+    }
   } else if (op.op === 'STOP') {
-    // Disable agent/user action buttons
     (document.getElementById('inferenceBtn') as HTMLButtonElement).disabled = true;
-    // Enable Reset button
     (document.getElementById('resetBtn') as HTMLButtonElement).disabled = false;
-    // Disable Input Next Step button
-    const inputNextStepBtn = document.getElementById('input-next-step-btn') as HTMLButtonElement | null;
-    if (inputNextStepBtn) inputNextStepBtn.disabled = true;
-    // Disable modal input and submit button if modal is open
-    const nextStepInput = document.getElementById('next-step-input') as HTMLInputElement | null;
-    if (nextStepInput) nextStepInput.disabled = true;
-    const submitNextStep = document.getElementById('submit-next-step') as HTMLButtonElement | null;
-    if (submitNextStep) submitNextStep.disabled = true;
-    // Remove or disable user action controls if present
-    const userActionInput = document.getElementById('user-action-input') as HTMLInputElement | null;
-    if (userActionInput) userActionInput.disabled = true;
-    const userActionBtn = Array.from(document.getElementsByTagName('button')).find(btn => btn.textContent === 'Submit user action');
-    if (userActionBtn) userActionBtn.setAttribute('disabled', 'true');
     addCheckSimulationButton();
   }
+  
   cy.layout({ name: 'preset' }).run();
   cy.fit(cy.elements(), 50);
 }
 
-async function nextStep(): Promise<void> {
+async function reset(): Promise<void> {
   if (!traceLoaded) return;
-  setLoading(true, 'Stepping...');
-  const res = await fetch(`${API_BASE}/step`, { method: 'POST', credentials: 'include' });
-  const { op, done } = await res.json();
-  setLoading(false);
-  if (done) {
-    setButtonsEnabled(false);
-    (document.getElementById('resetBtn') as HTMLButtonElement).disabled = false;
-    return;
+  setLoading(true, 'Resetting...');
+  
+  await fetch(`${API_BASE}/reset`, { method: 'POST', credentials: 'include' });
+  cy.elements().remove();
+  (document.getElementById('output') as HTMLElement).textContent = '';
+  cy.layout({ name: 'preset' }).run();
+  cy.center();
+  
+  if (selectedStart && selectedTarget) {
+    const resp = await fetch(`${API_BASE}/init_gadgets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        initial_gadgets: [selectedStart, selectedStart],
+        target_gadget: selectedTarget
+      }),
+      credentials: 'include',
+    });
+    const { env_state } = await resp.json();
+    await initFromBackend(env_state, [selectedStart, selectedStart], selectedTarget);
+  } else {
+    await initFromBackend();
   }
-  renderOp(op);
+  
+  (document.getElementById('inferenceBtn') as HTMLButtonElement).disabled = false;
+  (document.getElementById('resetBtn') as HTMLButtonElement).disabled = false;
+  setLoading(false);
+  
+  const checkBtn = document.getElementById('check-simulation-btn');
+  if (checkBtn) checkBtn.remove();
 }
 
-function addCheckSimulationButton() {
+function addCheckSimulationButton(): void {
   // Remove if already exists
   const existing = document.getElementById('check-simulation-btn');
-  if (existing && existing.parentElement) existing.parentElement.remove();
+  if (existing && existing.parentElement) {
+    existing.parentElement.remove();
+  }
+  
   const btn = document.createElement('button');
   btn.id = 'check-simulation-btn';
   btn.className = 'button is-primary is-medium';
   btn.textContent = 'Check Simulation';
+  
   btn.onclick = async () => {
     btn.disabled = true;
     const outputElem = document.getElementById('output') as HTMLElement;
     outputElem.textContent = 'Checking simulation...';
     outputElem.style.color = '';
+    
     try {
-      const res = await fetch(`${API_BASE}/check_equivalence`, { method: 'POST', credentials: 'include' });
+      const res = await fetch(`${API_BASE}/check_equivalence`, { 
+        method: 'POST', 
+        credentials: 'include' 
+      });
       const data = await res.json();
+      
       if (data.result === true) {
         outputElem.textContent = 'Simulation result: YES (gadgets are equivalent)';
         outputElem.style.color = 'green';
@@ -232,14 +844,17 @@ function addCheckSimulationButton() {
       btn.disabled = false;
     }
   };
+  
   // Wrap in a .control div
   const controlDiv = document.createElement('div');
   controlDiv.className = 'control';
   controlDiv.appendChild(btn);
+  
   // Insert after Input Next Step control if present, else after Agent Next Step
   const controlsGroup = document.querySelector('.controls-group');
   const inputNextStepControl = document.getElementById('input-next-step-btn')?.parentElement;
   const inferenceControl = document.getElementById('inferenceBtn')?.parentElement;
+  
   if (controlsGroup && inputNextStepControl) {
     controlsGroup.insertBefore(controlDiv, inputNextStepControl.nextSibling);
   } else if (controlsGroup && inferenceControl) {
@@ -249,474 +864,44 @@ function addCheckSimulationButton() {
   }
 }
 
-// Remove Check Simulation button on reset or new session
-async function reset(): Promise<void> {
-  if (!traceLoaded) return;
-  setLoading(true, 'Resetting...');
-  await fetch(`${API_BASE}/reset`, { method: 'POST', credentials: 'include' });
-  cy.elements().remove();
-  (document.getElementById('output') as HTMLElement).textContent = '';
-  cy.layout({ name: 'preset' }).run();
-  cy.center();
-  // Use the previously selected gadgets
-  if (selectedStart && selectedTarget) {
-    const resp = await fetch(`${API_BASE}/init_gadgets`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        initial_gadgets: [selectedStart, selectedStart],
-        target_gadget: selectedTarget
-      }),
-      credentials: 'include',
-    });
-    const { env_state } = await resp.json();
-    await initFromBackend(env_state, [selectedStart, selectedStart], selectedTarget);
-  } else {
-    await initFromBackend();
-  }
-  // Re-enable all action buttons and inputs after reset
-  (document.getElementById('inferenceBtn') as HTMLButtonElement).disabled = false;
-  (document.getElementById('resetBtn') as HTMLButtonElement).disabled = false;
-  const inputNextStepBtn = document.getElementById('input-next-step-btn') as HTMLButtonElement | null;
-  if (inputNextStepBtn) inputNextStepBtn.disabled = false;
-  const nextStepInput = document.getElementById('next-step-input') as HTMLInputElement | null;
-  if (nextStepInput) nextStepInput.disabled = false;
-  const submitNextStep = document.getElementById('submit-next-step') as HTMLButtonElement | null;
-  if (submitNextStep) submitNextStep.disabled = false;
-  setLoading(false);
-  const checkBtn = document.getElementById('check-simulation-btn');
-  if (checkBtn) checkBtn.remove();
-}
-
-// --- Gadget selection landing page logic ---
-const GADGET_INFO = {
-  AP2T: {
-    name: 'AP2T',
-    desc: 'Anti-Parallel 2-Toggle: Horizontal traversals in opposite directions.'
-  },
-  C2T: {
-    name: 'C2T',
-    desc: 'Crossing 2-Toggle: Diagonal traversals.'
-  },
-  P2T: {
-    name: 'P2T',
-    desc: 'Parallel 2-Toggle: Horizontal traversals in parallel directions.'
-  },
-  NWT: {
-    name: 'NWT',
-    desc: 'Noncrossing-Wire Toggle: Allows a traversal until wire is crossed; crossing again allows re-traversing.'
-  }
-};
-
-const GADGET_SVGS: Record<string, string> = {
-  AP2T: `
-    <svg width="90" height="90" viewBox="0 0 90 90">
-      <rect x="15" y="15" width="60" height="60" rx="10" fill="#fff" stroke="#1976d2" stroke-width="3"/>
-      <line x1="15" y1="25" x2="75" y2="25" stroke="#1976d2" stroke-width="7" marker-end="url(#arrow)"/>
-      <line x1="75" y1="65" x2="15" y2="65" stroke="#1976d2" stroke-width="7" marker-end="url(#arrow)"/>
-      <defs>
-        <marker id="arrow" markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto">
-          <polygon points="0,0 6,3 0,6" fill="#1976d2"/>
-        </marker>
-      </defs>
-    </svg>
-  `,
-  C2T: `
-    <svg width="90" height="90" viewBox="0 0 90 90">
-      <rect x="15" y="15" width="60" height="60" rx="10" fill="#fff" stroke="#388e3c" stroke-width="3"/>
-      <line x1="15" y1="15" x2="75" y2="75" stroke="#388e3c" stroke-width="7" marker-end="url(#arrow)"/>
-      <line x1="75" y1="15" x2="15" y2="75" stroke="#fbc02d" stroke-width="7" marker-end="url(#arrow2)"/>
-      <defs>
-        <marker id="arrow" markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto">
-          <polygon points="0,0 6,3 0,6" fill="#388e3c"/>
-        </marker>
-        <marker id="arrow2" markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto">
-          <polygon points="0,0 6,3 0,6" fill="#fbc02d"/>
-        </marker>
-      </defs>
-    </svg>
-  `,
-  P2T: `
-    <svg width="90" height="90" viewBox="0 0 90 90">
-      <rect x="15" y="15" width="60" height="60" rx="10" fill="#fff" stroke="#7b1fa2" stroke-width="3"/>
-      <line x1="15" y1="25" x2="75" y2="25" stroke="#7b1fa2" stroke-width="7" marker-end="url(#arrow)"/>
-      <line x1="15" y1="65" x2="75" y2="65" stroke="#7b1fa2" stroke-width="7" marker-end="url(#arrow)"/>
-      <defs>
-        <marker id="arrow" markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto">
-          <polygon points="0,0 6,3 0,6" fill="#7b1fa2"/>
-        </marker>
-      </defs>
-    </svg>
-  `,
-  NWT: `
-    <svg width="90" height="90" viewBox="0 0 90 90">
-      <rect x="15" y="15" width="60" height="60" rx="10" fill="#fff" stroke="#616161" stroke-width="3"/>
-      <line x1="15" y1="45" x2="75" y2="45" stroke="#616161" stroke-width="7"/>
-      <line x1="45" y1="7" x2="45" y2="23" stroke="#111" stroke-width="7"/>
-    </svg>
-  `
-};
-
-function renderGadgetCards(containerId: string, selectType: 'start' | 'target') {
-  console.log('Rendering gadget cards for', containerId);
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  container.innerHTML = '';
-  Object.entries(GADGET_INFO).forEach(([key, info]) => {
-    const card = document.createElement('div');
-    card.className = 'card m-4 p-4';
-    card.style.width = '300px';
-    card.style.minHeight = '200px';
-    card.style.cursor = 'pointer';
-    card.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)';
-    card.style.display = 'flex';
-    card.style.flexDirection = 'column';
-    card.style.justifyContent = 'center';
-    card.style.alignItems = 'flex-start';
-    card.dataset.gadget = key;
-    card.innerHTML = `
-      <div class=\"card-content p-3\">  
-        <div class=\"gadget-svg\" style=\"height: 90px; margin-bottom: 1.2rem;\">${GADGET_SVGS[key]}</div>
-        <p class=\"title is-4\" style=\"font-size: 1.5rem; margin-bottom: 1.2rem;\">${info.name}</p>
-        <p class=\"subtitle is-6\" style=\"font-size: 1.1rem; margin-top: 0.5rem;\">${info.desc}</p>
-      </div>
-    `;
-    card.onclick = () => handleGadgetSelect(key, selectType, card);
-    container.appendChild(card);
-  });
-}
-
-let selectedStart: string | null = null;
-let selectedTarget: string | null = null;
-
-function handleGadgetSelect(gadget: string, type: 'start' | 'target', card: HTMLElement) {
-  if (type === 'start') {
-    selectedStart = gadget;
-    // Highlight only one
-    const allCards = document.querySelectorAll('#start-gadget-cards .card');
-    allCards.forEach(c => c.classList.remove('has-background-info-light'));
-    card.classList.add('has-background-info-light');
-  } else {
-    selectedTarget = gadget;
-    // Highlight only one
-    const allCards = document.querySelectorAll('#target-gadget-cards .card');
-    allCards.forEach(c => c.classList.remove('has-background-success-light'));
-    card.classList.add('has-background-success-light');
-  }
-  updateStartButtonState();
-}
-
-function updateStartButtonState() {
-  const btn = document.getElementById('startSessionBtn') as HTMLButtonElement;
-  btn.disabled = !(!!selectedStart && !!selectedTarget);
-}
-
-// Add modal HTML to the DOM on page load
-function createInputNextStepModal() {
-  const modal = document.createElement('div');
-  modal.id = 'input-next-step-modal';
-  modal.style.display = 'none';
-  modal.style.position = 'fixed';
-  modal.style.top = '0';
-  modal.style.left = '0';
-  modal.style.width = '100vw';
-  modal.style.height = '100vh';
-  modal.style.background = 'rgba(0,0,0,0.4)';
-  modal.style.zIndex = '1000';
-  modal.innerHTML = `
-    <div style="background: #fff; max-width: 480px; margin: 10vh auto; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 16px rgba(0,0,0,0.18); position: relative;">
-      <button id="close-next-step-modal" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
-      <h2 class="title is-4">Input Next Step</h2>
-      <input id="next-step-input" class="input mb-2" type="text" placeholder="e.g. COMBINE(g1, g0, rot=2, splice=3)" style="width: 100%;" />
-      <button id="submit-next-step" class="button is-primary mt-2">Submit</button>
-      <div class="mt-4">
-        <strong>Examples:</strong>
-        <ul style="font-size: 0.95em; margin-top: 0.5em;">
-          <li>STOP</li>
-          <li>CONNECT gadget 0 ports 5 and 2</li>
-          <li>COMBINE gadgets 1 and 0 (rot=2, splice=3)</li>
-        </ul>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-
-  // Close modal logic
-  document.getElementById('close-next-step-modal')!.onclick = () => {
-    modal.style.display = 'none';
-  };
-  // Submit logic
-  document.getElementById('submit-next-step')!.onclick = async () => {
-    const input = (document.getElementById('next-step-input') as HTMLInputElement).value.trim();
-    if (!input) {
-      alert('Please enter an action.');
-      return;
-    }
-    const res = await fetch(`${API_BASE}/apply_action`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: input, actor: 'user' }),
-      credentials: 'include',
-    });
-    const result = await res.json();
-    if (!result.success) {
-      alert('Failed: ' + (result.error || 'Unknown error'));
-    } else {
-      renderOp(result.op);
-      modal.style.display = 'none';
-      (document.getElementById('next-step-input') as HTMLInputElement).value = '';
-    }
-  };
-}
-
-// Add the button to open the modal
-function addInputNextStepButton() {
-  const btn = document.createElement('button');
-  btn.id = 'input-next-step-btn';
-  btn.className = 'button is-info is-medium';
-  btn.textContent = 'Input Next Step';
-  btn.onclick = () => {
-    const modal = document.getElementById('input-next-step-modal')!;
-    modal.style.display = 'block';
-    (document.getElementById('next-step-input') as HTMLInputElement).focus();
-  };
-  // Wrap in a .control div
-  const controlDiv = document.createElement('div');
-  controlDiv.className = 'control';
-  controlDiv.appendChild(btn);
-  // Insert after the Agent Next Step control
-  const controlsGroup = document.querySelector('.controls-group');
-  const inferenceControl = document.getElementById('inferenceBtn')?.parentElement;
-  if (controlsGroup && inferenceControl) {
-    controlsGroup.insertBefore(controlDiv, inferenceControl.nextSibling);
-  } else if (controlsGroup) {
-    controlsGroup.appendChild(controlDiv);
-  }
-}
+// ============= INITIALIZATION =============
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Hide simulation UI until session started
-  const simSection = document.querySelectorAll('.section');
-  if (simSection.length > 1) (simSection[1] as HTMLElement).style.display = 'none';
-
-  // Add back arrow button logic
-  const backBtn = document.getElementById('back-to-gadget-select') as HTMLButtonElement | null;
-  if (backBtn) backBtn.style.display = 'none'; // Hide by default
-  if (backBtn) {
-    backBtn.onclick = () => {
-      // Hide simulation section, show landing section
-      if (simSection.length > 1) (simSection[1] as HTMLElement).style.display = 'none';
-      const landingSection = document.getElementById('landing-section');
-      if (landingSection) landingSection.style.display = '';
-      // Reset state
-      traceLoaded = false;
-      cy.elements().remove();
-      (document.getElementById('output') as HTMLElement).textContent = '';
-      (document.getElementById('inferenceBtn') as HTMLButtonElement).disabled = true;
-      (document.getElementById('resetBtn') as HTMLButtonElement).disabled = true;
-      const inputNextStepBtn = document.getElementById('input-next-step-btn') as HTMLButtonElement | null;
-      if (inputNextStepBtn) inputNextStepBtn.disabled = true;
-      const nextStepInput = document.getElementById('next-step-input') as HTMLInputElement | null;
-      if (nextStepInput) nextStepInput.disabled = true;
-      const submitNextStep = document.getElementById('submit-next-step') as HTMLButtonElement | null;
-      if (submitNextStep) submitNextStep.disabled = true;
-      // Hide back arrow again
-      if (backBtn) backBtn.style.display = 'none';
-    };
-  }
-
-  setButtonsEnabled(false);
-  // Remove nextBtn event listener since nextStepBtn no longer exists
+  // Initialize interaction modes
+  initializeInteractionModes();
+  
+  // Setup drag-drop and connection events
+  setupDragDropEvents();
+  setupConnectionEvents();
+  
+  // Setup keyboard shortcuts
+  setupKeyboardShortcuts();
+  
   const resetBtn = document.getElementById('resetBtn') as HTMLButtonElement;
-  const inferenceBtn = document.getElementById('inferenceBtn') as HTMLButtonElement;
-
-  // nextBtn.addEventListener('click', nextStep); // REMOVE THIS LINE
-  resetBtn.addEventListener('click', reset);
-  inferenceBtn.addEventListener('click', inferModelStep);
-
-  // Remove all legacy code and comments related to traces, trace upload/selection, and unused/commented-out code.
-  // Only keep code relevant to gadget selection, agent/user action, and simulation flow.
-  renderGadgetCards('start-gadget-cards', 'start');
-  renderGadgetCards('target-gadget-cards', 'target');
-  const startBtn = document.getElementById('startSessionBtn');
-  if (startBtn) {
-    startBtn.addEventListener('click', async () => {
-      if (!selectedStart || !selectedTarget) return;
-      setLoading(true, 'Initializing environment...');
-      const resp = await fetch(`${API_BASE}/init_gadgets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          initial_gadgets: [selectedStart, selectedStart],
-          target_gadget: selectedTarget
-        }),
-        credentials: 'include',
-      });
-      if (!resp.ok) {
-        setLoading(false);
-        alert('Failed to initialize environment');
-        return;
-      }
-      await fetch(`${API_BASE}/reset`, { method: 'POST', credentials: 'include' });
-      const { env_state } = await resp.json();
-      document.getElementById('landing-section')!.style.display = 'none';
-      const simSection = document.querySelectorAll('.section');
-      if (simSection.length > 1) (simSection[1] as HTMLElement).style.display = '';
-      // Show back arrow now that session has started
-      if (backBtn) backBtn.style.display = '';
-      traceLoaded = true;
-      setButtonsEnabled(true);
-      await initFromBackend(env_state, [selectedStart, selectedStart], selectedTarget);
-      setLoading(false);
-    });
+  if (resetBtn) {
+    resetBtn.addEventListener('click', reset);
   }
-  createInputNextStepModal();
-  addInputNextStepButton();
+  
+  // Add stop button listener
+  const stopBtn = document.getElementById('stopBtn');
+  if (!stopBtn) {
+    // Create stop button if it doesn't exist
+    const controlsGroup = document.querySelector('.controls-group');
+    if (controlsGroup) {
+      const stopControl = document.createElement('div');
+      stopControl.className = 'control';
+      stopControl.innerHTML = '<button class="button is-danger is-medium" id="stopBtn">Stop (S)</button>';
+      controlsGroup.appendChild(stopControl);
+      
+      document.getElementById('stopBtn')?.addEventListener('click', executeStop);
+    }
+  } else {
+    stopBtn.addEventListener('click', executeStop);
+  }
+  
+  console.log('PIEFACE Enhanced Interactions initialized');
 });
 
-async function inferModelStep(): Promise<void> {
-  try {
-    const modelName = modelSelect?.value;
-    const response = await fetch(`${API_BASE}/infer_next_step`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: modelName }),
-      credentials: 'include',
-    });
-    const data = await response.json();
-
-    const suggestionDiv = document.getElementById('model-suggestion') as HTMLElement;
-    const topActionsList = document.getElementById('top-actions') as HTMLElement;
-    suggestionDiv.textContent = '';
-    topActionsList.innerHTML = '';
-
-    if (data.description) {
-      suggestionDiv.innerHTML = `Model suggests: ${data.description}<span title="${data.tooltip || ''}" style="cursor: help;">- confused?</span>`;
-    }
-
-    if (data.top_actions) {
-      data.top_actions.forEach(({ action_desc, confidence }: any) => {
-        const li = document.createElement('li');
-        li.textContent = `${action_desc} (${(confidence * 100).toFixed(1)}%)`;
-        topActionsList.appendChild(li);
-      });
-    }
-    const suggestion = data.description;
-    (document.getElementById('model-suggestion') as HTMLElement).textContent = suggestion;
-
-    const acceptBtn = document.createElement('button');
-    acceptBtn.textContent = 'Accept agent action';
-    acceptBtn.classList.add('button', 'is-small', 'is-success');
-
-    const denyBtn = document.createElement('button');
-    denyBtn.textContent = 'Deny agent action';
-    denyBtn.classList.add('button', 'is-small', 'is-danger');
-    denyBtn.onclick = () => {
-      suggestionDiv.textContent = 'Agent action denied.';
-      acceptBtn.remove();
-      denyBtn.remove();
-      (document.getElementById('resetBtn') as HTMLButtonElement).disabled = false;
-      (document.getElementById('inferenceBtn') as HTMLButtonElement).disabled = false;
-    };
-    document.getElementById('model-suggestion-box')?.appendChild(denyBtn);
-
-    acceptBtn.onclick = async () => {
-      const res = await fetch(`${API_BASE}/apply_action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: suggestion, actor: 'agent' }),
-        credentials: 'include',
-      });
-      const result = await res.json();
-      if (!result.success) {
-        alert('Failed: ' + result.error);
-      } else {
-        renderOp(result.op);
-        suggestionDiv.textContent = '';
-        acceptBtn.remove();
-        denyBtn.remove();
-        (document.getElementById('resetBtn') as HTMLButtonElement).disabled = false;
-        (document.getElementById('inferenceBtn') as HTMLButtonElement).disabled = false;
-      }
-    };
-    document.getElementById('model-suggestion-box')?.appendChild(acceptBtn);
-  } catch (err) {
-    console.error('Error fetching model suggestion:', err);
-  }
-}
-
-function addUserActionControls() {
-  if (document.getElementById("user-action-input")) return;
-  const container = document.getElementById("model-suggestion-box");
-  if (!container) return;
-
-  const userActionInput = document.createElement("input");
-  userActionInput.type = "text";
-  userActionInput.id = "user-action-input";
-  userActionInput.placeholder = "Enter your own action";
-  userActionInput.className = "input is-small mt-2 mb-2";
-
-  const userActionBtn = document.createElement("button");
-  userActionBtn.textContent = "Submit user action";
-  userActionBtn.className = "button is-small is-info ml-2";
-  userActionBtn.onclick = submitUserAction;
-
-  container.appendChild(userActionInput);
-  container.appendChild(userActionBtn);
-}
-
-async function submitUserAction() {
-  // --- Auto-deny agent action ---
-  // Clear agent suggestion text
-  const suggestionDiv = document.getElementById("model-suggestion");
-  if (suggestionDiv) suggestionDiv.textContent = "";
-
-  // Remove accept/deny buttons if present
-  const suggestionBox = document.getElementById("model-suggestion-box");
-  if (suggestionBox) {
-    Array.from(suggestionBox.getElementsByTagName("button")).forEach(btn => {
-      if (btn.textContent === "Accept agent action" || btn.textContent === "Deny agent action") {
-        btn.remove();
-      }
-    });
-  }
-
-  // Clear top 5 suggestions
-  const topActionsList = document.getElementById("top-actions");
-  if (topActionsList) topActionsList.innerHTML = "";
-
-  // Remove user input box and button
-  const userActionInput = document.getElementById("user-action-input");
-  if (userActionInput) userActionInput.remove();
-  if (suggestionBox) {
-    Array.from(suggestionBox.getElementsByTagName("button")).forEach(btn => {
-      if (btn.textContent === "Submit user action") {
-        btn.remove();
-      }
-    });
-  }
-
-  const input = userActionInput as HTMLInputElement | null;
-  if (!input) return;
-  const action = input.value.trim();
-  if (!action) {
-    alert("Please enter an action.");
-    return;
-  }
-  const res = await fetch(`${API_BASE}/apply_action`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ action, actor: "user" }),
-    credentials: 'include',
-  });
-  const result = await res.json();
-  if (!result.success) {
-    alert("Failed: " + result.error);
-  } else {
-    renderOp(result.op); // Update UI with new state
-    // input.value = ""; // No need to clear since input is removed
-  }
-}
-
-window.nextStep = nextStep;
-window.reset = reset;
+(window as any).reset = reset;
+(window as any).setMode = setMode;
+(window as any).executeStop = executeStop;
