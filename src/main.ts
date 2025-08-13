@@ -1,4 +1,4 @@
-// src/main.ts - PIEFACE with Enhanced Interactions (Preserving Original Logic)
+
 import { makePortList } from './helpers.js';
 import {
   addGadgetNode,
@@ -809,8 +809,6 @@ async function inferModelStep(): Promise<void> {
 
 // === MAIN INITIALIZATION ===
 document.addEventListener('DOMContentLoaded', () => {
-  refreshMetrics();
-  setInterval(refreshMetrics, 5000);
   const simSection = document.querySelectorAll('.section');
   if (simSection.length > 1) (simSection[1] as HTMLElement).style.display = 'none';
 
@@ -880,6 +878,8 @@ document.addEventListener('DOMContentLoaded', () => {
       setupEnhancedInteractions();
     });
   }
+  refreshMetrics();
+  setInterval(refreshMetrics, 5000);
   
   createInputNextStepModal();
   addInputNextStepButton();
