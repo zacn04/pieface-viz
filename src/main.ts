@@ -123,6 +123,66 @@ async function initFromBackend(env_state?: any, initialGadgets?: any[], targetGa
   setLoading(false);
 }
 
+function _pct(x: number): number { 
+  return Math.round((x || 0) * 100); 
+}
+
+function _fmtDelta(pct: number): string { 
+  const s = Math.round(pct * 10) / 10; 
+  return (s > 0 ? '+' : '') + s + '%'; 
+}
+
+async function fetchMetrics(): Promise<any> {
+  const url = `${API_BASE}/metrics`;
+  const res = await fetch(url, { cache: 'no-store', credentials: 'include' });
+  if (!res.ok) throw new Error('metrics fetch failed');
+  return res.json();
+}
+
+function renderMetrics(m: any): void {
+  const b = m?.baseline || { n: 0, success_rate: 0 };
+  const h = m?.rlhf || { n: 0, success_rate: 0 };
+
+  const bp = _pct(b.success_rate);
+  const hp = _pct(h.success_rate);
+  const d = hp - bp;
+
+  const basePctEl = document.getElementById('m-base-pct');
+  const baseBarEl = document.getElementById('m-base-bar') as HTMLProgressElement;
+  const baseNEl = document.getElementById('m-base-n');
+
+  const rlhfPctEl = document.getElementById('m-rlhf-pct');
+  const rlhfBarEl = document.getElementById('m-rlhf-bar') as HTMLProgressElement;
+  const rlhfNEl = document.getElementById('m-rlhf-n');
+
+  const deltaEl = document.getElementById('m-delta');
+  const updEl = document.getElementById('m-updated');
+
+  if (!basePctEl) return; // panel not on page
+
+  basePctEl.textContent = `${bp}%`;
+  baseBarEl.value = bp;
+  baseNEl.textContent = `n = ${b.n || 0}`;
+
+  rlhfPctEl.textContent = `${hp}%`;
+  rlhfBarEl.value = hp;
+  rlhfNEl.textContent = `n = ${h.n || 0}`;
+
+  deltaEl.textContent = _fmtDelta(d);
+  updEl.textContent = `Last 200 episodes • refreshed ${new Date().toLocaleTimeString()}`;
+}
+
+async function refreshMetrics(): Promise<void> {
+  try {
+    const m = await fetchMetrics();
+    renderMetrics(m);
+  } catch (e) {
+    console.error(e);
+    const updEl = document.getElementById('m-updated');
+    if (updEl) updEl.textContent = 'Metrics unavailable';
+  }
+}
+
 function renderOp(op: any): void {
   (document.getElementById('output') as HTMLElement).textContent = JSON.stringify(op) + '\n';
   
@@ -749,6 +809,8 @@ async function inferModelStep(): Promise<void> {
 
 // === MAIN INITIALIZATION ===
 document.addEventListener('DOMContentLoaded', () => {
+  refreshMetrics();
+  setInterval(refreshMetrics, 5000);
   const simSection = document.querySelectorAll('.section');
   if (simSection.length > 1) (simSection[1] as HTMLElement).style.display = 'none';
 
