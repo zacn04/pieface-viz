@@ -506,7 +506,7 @@ function addInputNextStepButton() {
 
 function setupEnhancedInteractions() {
   const controlsGroup = document.querySelector('.controls-group');
-  if (controlsGroup && !document.querySelector('.mode-btn')) {
+  if (controlsGroup && !document.querySelector('.mode-btn') && !document.querySelector('.mode-selector')) {
     const modeDiv = document.createElement('div');
     modeDiv.className = 'control';
     modeDiv.innerHTML = `
