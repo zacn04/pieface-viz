@@ -26,6 +26,11 @@ let currentMode = 'select'; // Default to select
 let draggedNode = null;
 let dragStartPos = null;
 let connectingPort = null;
+// Enhanced interaction state
+let currentMode = 'select'; // Default to select
+let draggedNode = null;
+let dragStartPos = null;
+let connectingPort = null;
 const cy = cytoscape({
     container: document.getElementById('cy'),
     elements: [],
@@ -842,11 +847,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const simSection = document.querySelectorAll('.section');
             if (simSection.length > 1)
                 simSection[1].style.display = '';
-            console.log('Testing direct metrics fetch...');
-            fetch(`${API_BASE}/metrics`, { credentials: 'include' })
-                .then(r => r.json())
-                .then(data => console.log('Direct metrics data:', data))
-                .catch(err => console.error('Direct metrics error:', err));
             refreshMetrics();
             setInterval(refreshMetrics, 5000);
             if (backBtn)
