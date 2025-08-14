@@ -21,12 +21,6 @@ const gadgets = {};
 let gadgetIdCounter = 0;
 const combinedGroups = [];
 const groupPortMaps = {};
-// Enhanced interaction state
-let currentMode = 'select'; // Default to select
-let draggedNode = null;
-let dragStartPos = null;
-let connectingPort = null;
-// Enhanced interaction state
 let currentMode = 'select'; // Default to select
 let draggedNode = null;
 let dragStartPos = null;
@@ -122,7 +116,7 @@ function _fmtDelta(pct) {
 function fetchMetrics() {
     return __awaiter(this, void 0, void 0, function* () {
         const url = `${API_BASE}/metrics`;
-        console.log('Fetching from:', url); // ADD THIS
+        console.log('Fetching from:', url);
         const res = yield fetch(url, { cache: 'no-store', credentials: 'include' });
         if (!res.ok)
             throw new Error('metrics fetch failed');
@@ -163,10 +157,8 @@ function renderMetrics(m) {
 }
 function refreshMetrics() {
     return __awaiter(this, void 0, void 0, function* () {
-        console.log('refreshMetrics called!'); // ADD THIS
         try {
             const m = yield fetchMetrics();
-            console.log('Metrics received:', m); // ADD THIS
             renderMetrics(m);
         }
         catch (e) {
@@ -500,7 +492,6 @@ function addInputNextStepButton() {
     }
 }
 function setupEnhancedInteractions() {
-    // Add mode selector UI
     const controlsGroup = document.querySelector('.controls-group');
     if (controlsGroup && !document.querySelector('.mode-selector')) {
         const modeDiv = document.createElement('div');
