@@ -134,6 +134,7 @@ function _fmtDelta(pct: number): string {
 
 async function fetchMetrics(): Promise<any> {
   const url = `${API_BASE}/metrics`;
+  console.log('Fetching from:', url); // ADD THIS
   const res = await fetch(url, { cache: 'no-store', credentials: 'include' });
   if (!res.ok) throw new Error('metrics fetch failed');
   return res.json();
@@ -173,15 +174,18 @@ function renderMetrics(m: any): void {
 }
 
 async function refreshMetrics(): Promise<void> {
+  console.log('refreshMetrics called!'); // ADD THIS
   try {
     const m = await fetchMetrics();
+    console.log('Metrics received:', m); // ADD THIS
     renderMetrics(m);
   } catch (e) {
-    console.error(e);
+    console.error('Metrics error:', e);
     const updEl = document.getElementById('m-updated');
     if (updEl) updEl.textContent = 'Metrics unavailable';
   }
 }
+
 
 function renderOp(op: any): void {
   (document.getElementById('output') as HTMLElement).textContent = JSON.stringify(op) + '\n';
