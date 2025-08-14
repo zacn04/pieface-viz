@@ -876,6 +876,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const simSection = document.querySelectorAll('.section');
       if (simSection.length > 1) (simSection[1] as HTMLElement).style.display = '';
 
+      console.log('Testing direct metrics fetch...');
+      fetch(`${API_BASE}/metrics`, { credentials: 'include' })
+        .then(r => r.json())
+        .then(data => console.log('Direct metrics data:', data))
+        .catch(err => console.error('Direct metrics error:', err));
+
       refreshMetrics();
       setInterval(refreshMetrics, 5000);
       
