@@ -7,7 +7,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-// src/main.ts - PIEFACE with Enhanced Interactions (Preserving Original Logic)
 import { makePortList } from './helpers.js';
 import { addGadgetNode, addPortNode, addPortEdge, addCompoundNode, relabelGadgetPorts } from './graph.js';
 const API_BASE = "https://api.pieface.ai";
@@ -106,6 +105,71 @@ function initFromBackend(env_state, initialGadgets, targetGadget) {
         cy.fit(cy.elements(), 50);
         cy.center();
         setLoading(false);
+    });
+}
+function _pct(x) {
+    return Math.round((x || 0) * 100);
+}
+function _fmtDelta(pct) {
+    const s = Math.round(pct * 10) / 10;
+    return (s > 0 ? '+' : '') + s + '%';
+}
+function fetchMetrics() {
+    return __awaiter(this, void 0, void 0, function* () {
+        const url = `${API_BASE}/metrics`;
+        console.log('Fetching from:', url); // ADD THIS
+        const res = yield fetch(url, { cache: 'no-store', credentials: 'include' });
+        if (!res.ok)
+            throw new Error('metrics fetch failed');
+        return res.json();
+    });
+}
+function renderMetrics(m) {
+    const b = (m === null || m === void 0 ? void 0 : m.baseline) || { n: 0, success_rate: 0 };
+    const h = (m === null || m === void 0 ? void 0 : m.rlhf) || { n: 0, success_rate: 0 };
+    const bp = _pct(b.success_rate);
+    const hp = _pct(h.success_rate);
+    const d = hp - bp;
+    const basePctEl = document.getElementById('m-base-pct');
+    const baseBarEl = document.getElementById('m-base-bar');
+    const baseNEl = document.getElementById('m-base-n');
+    const rlhfPctEl = document.getElementById('m-rlhf-pct');
+    const rlhfBarEl = document.getElementById('m-rlhf-bar');
+    const rlhfNEl = document.getElementById('m-rlhf-n');
+    const deltaEl = document.getElementById('m-delta');
+    const updEl = document.getElementById('m-updated');
+    if (!basePctEl)
+        return; // panel not on page
+    basePctEl.textContent = `${bp}%`;
+    if (baseBarEl)
+        baseBarEl.value = bp;
+    if (baseNEl)
+        baseNEl.textContent = `n = ${b.n || 0}`;
+    if (rlhfPctEl)
+        rlhfPctEl.textContent = `${hp}%`;
+    if (rlhfBarEl)
+        rlhfBarEl.value = hp;
+    if (rlhfNEl)
+        rlhfNEl.textContent = `n = ${h.n || 0}`;
+    if (deltaEl)
+        deltaEl.textContent = _fmtDelta(d);
+    if (updEl)
+        updEl.textContent = `Last 200 episodes • refreshed ${new Date().toLocaleTimeString()}`;
+}
+function refreshMetrics() {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log('refreshMetrics called!'); // ADD THIS
+        try {
+            const m = yield fetchMetrics();
+            console.log('Metrics received:', m); // ADD THIS
+            renderMetrics(m);
+        }
+        catch (e) {
+            console.error('Metrics error:', e);
+            const updEl = document.getElementById('m-updated');
+            if (updEl)
+                updEl.textContent = 'Metrics unavailable';
+        }
     });
 }
 function renderOp(op) {
@@ -778,6 +842,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const simSection = document.querySelectorAll('.section');
             if (simSection.length > 1)
                 simSection[1].style.display = '';
+            console.log('Testing direct metrics fetch...');
+            fetch(`${API_BASE}/metrics`, { credentials: 'include' })
+                .then(r => r.json())
+                .then(data => console.log('Direct metrics data:', data))
+                .catch(err => console.error('Direct metrics error:', err));
+            refreshMetrics();
+            setInterval(refreshMetrics, 5000);
             if (backBtn)
                 backBtn.style.display = '';
             traceLoaded = true;
