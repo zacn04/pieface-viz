@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PIEFACE v2.0</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <script type="module" src="dist/src/main.js"></script>
+
+  <meta property="og:title" content="PIEFACE: Human Feedback & Eval Platform for Reasoning Agents">
+  <meta property="og:description" content="Built at MIT CSAIL. Annotate traces, train reward models, switch agents mid-session, and run alignment experiments.">
+  <meta property="og:url" content="https://pieface.ai">
+  <meta property="og:type" content="website">
+
+  <style>
+    /* group & space out controls */
+    .controls-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* make sure preformatted output scrolls instead of overflowing */
+    #output {
+      white-space: pre-wrap;
+      overflow-x: auto;
+      max-height: 300px;
+      padding: 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #fafafa;
+    }
+
+    /* just tighter borders on the graph area */
+    #cy {
+      width: 100%;
+      height: 350px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+
+<body>
+  <section class="section" id="landing-section">
+    <div class="container">
+      <h2 class="title is-4">Select Starting and Target Gadget Types</h2>
+      <div class="columns">
+        <div class="column">
+          <h3 class="subtitle is-6">Starting Gadget Type:</h3>
+          <div id="start-gadget-cards" class="columns is-multiline">
+            <!-- Gadget cards will be inserted here by JS -->
+          </div>
+        </div>
+        <div class="column">
+          <h3 class="subtitle is-6">Target Gadget Type:</h3>
+          <div id="target-gadget-cards" class="columns is-multiline">
+            <!-- Gadget cards will be inserted here by JS -->
+          </div>
+        </div>
+      </div>
+      <button class="button is-primary mt-3" id="startSessionBtn" disabled>Start</button>
+    </div>
+  </section>
+  <section class="section">
+    <div class="container">
+      <div class="level mb-4">
+        <h1 class="title level-left mb-0">PIEFACE v2.0</h1>
+        <div class="level-right">
+          <button id="back-to-gadget-select" class="button is-small is-light" style="display:none;">
+            <span style="font-size: 1.2rem; line-height: 1;">&#8592;</span> Back
+          </button>
+          <a href="index.html" class="button is-small is-light">Home</a>
+        </div>
+      </div>
+
+      <div class="columns is-variable is-6">
+        <div class="column is-three-quarters">
+          <div class="controls-group">
+
+            <!-- Model picker -->
+            <div class="control">
+              <span class="select is-medium">
+                <select id="modelSelect">
+                  <option value="modelA.zip">Model A (AP2T -> C2T)</option>
+                  <option value="modelB.zip">Model B (C2T -> AP2T)</option>
+                  <option value="modelX.zip">Model X (NWT -> AP2T)</option>
+                </select>
+              </span>
+            </div>
+
+            <!-- Agent infer and reset -->
+            <div class="control">
+              <button class="button is-medium is-success" id="inferenceBtn" disabled>Agent Next Step</button>
+            </div>
+            <div class="control">
+              <button class="button is-medium is-warning" id="resetBtn" disabled>Reset</button>
+            </div>
+            <!-- The Input Next Step button will be injected by JS next to inferenceBtn -->
+          </div>
+
+          <div id="cy"></div>
+          <pre id="output"></pre>
+        </div>
+
+        <div class="column is-one-quarter">
+          <div id="gadget-info" class="box">
+            <strong>Initial Gadgets:</strong>
+            <ul id="initial-gadgets"></ul>
+            <strong>Target Gadget:</strong>
+            <div id="target-gadget"></div>
+          </div>
+
+          <div id="model-suggestion-box" class="mt-4">
+            <div id="model-suggestion" class="has-text-danger has-text-monospace"></div>
+            <ul id="top-actions" class="mt-2 has-text-monospace" style="list-style: none; padding-left: 0;"></ul>
+          </div>
+          <div id="metrics-panel" class="box mt-4">
+          <p class="heading">RLHF vs Baseline (last 200 episodes)</p>
+
+          <div class="mb-3">
+            <span class="tag is-light">Baseline</span>
+            <span class="title is-5 ml-2" id="m-base-pct">—</span>
+            <progress class="progress is-link is-small mt-1" id="m-base-bar" value="0" max="100"></progress>
+            <p class="is-size-7 has-text-grey" id="m-base-n">n = —</p>
+          </div>
+
+          <div class="mb-3">
+            <span class="tag is-primary is-light">RLHF</span>
+            <span class="title is-5 ml-2" id="m-rlhf-pct">—</span>
+            <progress class="progress is-primary is-small mt-1" id="m-rlhf-bar" value="0" max="100"></progress>
+            <p class="is-size-7 has-text-grey" id="m-rlhf-n">n = —</p>
+          </div>
+
+          <div>
+            <span class="heading">Δ (RLHF - Baseline)</span>
+            <span class="title is-6 ml-2" id="m-delta">—</span>
+          </div>
+          
+
+          <p class="is-size-7 has-text-grey mt-2" id="m-updated">—</p>
+        </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</body>
+</html>
